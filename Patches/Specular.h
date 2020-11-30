@@ -105,7 +105,7 @@ struct ModelMaterial
 	float specularB;
 	DWORD reserved3;
 	DWORD unkIndex;
-	DWORD unkCount;
+	DWORD primCount;
 	DWORD reserved4;
 };
 static_assert(sizeof(ModelMaterial) == 128, "ModelMaterial is not 128 bytes large");

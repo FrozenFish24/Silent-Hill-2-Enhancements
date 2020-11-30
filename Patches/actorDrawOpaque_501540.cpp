@@ -342,6 +342,6 @@ LABEL_24:
 
 LABEL_51:
     pD3DDevice_A32894->SetStreamSource(0, pStreamData, 32);
-    pD3DDevice_A32894->DrawIndexedPrimitive(D3DPT_TRIANGLESTRIP, 0, (UINT)pModelMaterial->reserved1->pIndexData, 0, pModelMaterial->unkCount - 2);
+    pD3DDevice_A32894->DrawIndexedPrimitive(D3DPT_TRIANGLESTRIP, 0, (UINT)pModelMaterial->reserved1->pIndexData, 0, pModelMaterial->primCount - 2);
 }
 #pragma optimize("", on)
