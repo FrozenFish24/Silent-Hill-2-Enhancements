@@ -644,6 +644,7 @@ void PatchSaveBGImage();
 void PatchSpeakerConfigLock();
 void PatchSpecialFX();
 void PatchSpecular();
+void PatchEnvSpecular();
 void PatchSprayEffect();
 void PatchSFXAddr();
 void PatchSixtyFPS();
