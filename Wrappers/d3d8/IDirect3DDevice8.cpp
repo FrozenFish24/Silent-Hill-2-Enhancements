@@ -962,11 +962,6 @@ HRESULT m_IDirect3DDevice8::GetPixelShader(THIS_ DWORD* pHandle)
 {
 	Logging::LogDebug() << __FUNCTION__;
 
-	if (!myVsShaderHandle)
-	{
-		ProxyInterface->CreateVertexShader(myVsDecl, myVertexShader, &myVsShaderHandle, 0);
-	}
-
 	return ProxyInterface->GetPixelShader(pHandle);
 }
 
@@ -2358,6 +2353,11 @@ HRESULT m_IDirect3DDevice8::CreateVertexShader(THIS_ CONST DWORD* pDeclaration, 
 			ReplaceMemoryBytes((void*)HalogenLightFixShaderCode[0], (void*)HalogenLightFixShaderCode[1], sizeof(HalogenLightFixShaderCode[0]), (DWORD)pFunction, 0x400, 1);
 			ReplaceMemoryBytes((void*)HalogenLightFixShaderCode[2], (void*)HalogenLightFixShaderCode[3], sizeof(HalogenLightFixShaderCode[2]), (DWORD)pFunction, 0x400, 1);
 		}
+	}
+
+	if (!myVsShaderHandle)
+	{
+		ProxyInterface->CreateVertexShader(myVsDecl, myVertexShader, &myVsShaderHandle, 0);
 	}
 
 	return ProxyInterface->CreateVertexShader(pDeclaration, pFunction, pHandle, Usage);
