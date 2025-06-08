@@ -533,6 +533,9 @@
     <ClCompile Include="Patches\QuickLoadGame.cpp">
       <Filter>Patches</Filter>
     </ClCompile>
+    <ClCompile Include="Patches\Drips.cpp">
+      <Filter>Patches</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common\Settings.h">
@@ -777,6 +780,9 @@
     </ClInclude>
     <ClInclude Include="External\Hooking\Disasm.h">
       <Filter>External\Hooking</Filter>
+	  </ClInclude>
+    <ClInclude Include="Patches\Drips.h">
+      <Filter>Patches</Filter>
     </ClInclude>
     <ClInclude Include="Patches\ActorDrawingHook.h">
       <Filter>Patches</Filter>

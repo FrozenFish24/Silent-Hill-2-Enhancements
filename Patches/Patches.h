@@ -655,6 +655,7 @@ void PatchDogRoom();
 void PatchDoubleFootstepFix();
 void PatchDrawDistance();
 void PatchEddieLauraCutscene();
+void PatchDrips();
 void PatchElevatorCursorColor();
 void PatchFinalBossRoom();
 void PatchFireEscapeKey();
