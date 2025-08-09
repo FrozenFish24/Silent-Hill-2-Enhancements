@@ -43,7 +43,53 @@ inline D3DVECTOR cross(const D3DVECTOR& a, const D3DVECTOR& b) {
     };
 }
 
-void drawDrips(UINT primCount)
+std::vector<Triangle> transformDrips(UINT primCount)
+{
+    std::vector<Triangle> triList;
+    const float width = DropletSize;
+
+    for (size_t i = 0; i < primCount; i++) {
+        Line* line = &(&vertexStreamZeroData_963880)[i];
+
+        // TODO: Move to vertex shader
+        const Vertex center = { line->v0.x, (line->v0.y + line->v1.y) / 2, line->v0.z };
+        constexpr D3DVECTOR upVec = { 0,1,0 };
+
+        const Vertex camera = { GetInGameCameraPosX(), GetInGameCameraPosY(), GetInGameCameraPosZ() };
+        D3DVECTOR toCam = { camera.x - center.x, camera.y - center.y, camera.z - center.z };
+        toCam = normalize(toCam);
+
+        const D3DVECTOR rightVec = normalize(cross(upVec, toCam));
+
+        Vertex v0 = line->v0;
+        Vertex v1 = line->v0;
+        Vertex v2 = line->v1;
+        Vertex v3 = line->v1;
+
+        v0.x += rightVec.x * (width / 2);
+        v0.y += rightVec.y * (width / 2);
+        v0.z += rightVec.z * (width / 2);
+
+        v1.x -= rightVec.x * (width / 2);
+        v1.y -= rightVec.y * (width / 2);
+        v1.z -= rightVec.z * (width / 2);
+
+        v2.x += rightVec.x * (width / 2);
+        v2.y += rightVec.y * (width / 2);
+        v2.z += rightVec.z * (width / 2);
+
+        v3.x -= rightVec.x * (width / 2);
+        v3.y -= rightVec.y * (width / 2);
+        v3.z -= rightVec.z * (width / 2);
+
+        triList.push_back({ v3, v1, v0 });
+        triList.push_back({ v0, v2, v3 });
+    }
+
+    return triList;
+}
+
+void drawDrips(UINT primCount, std::vector<Triangle> triList)
 {
     D3DMATRIX worldMatrix;
 
@@ -79,51 +125,7 @@ void drawDrips(UINT primCount)
         g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &worldMatrix);
         g_d3d8Device_A32894->SetVertexShader(D3DFVF_XYZ | D3DFVF_DIFFUSE);
 
-        // NEW CODE
-        std::vector<Triangle> triList;
-        const float width = DropletSize;
-
-        for (size_t i = 0; i < primCount; i++) {
-            Line* line = &(&vertexStreamZeroData_963880)[i];
-
-            // TODO: Move to vertex shader
-            const Vertex center = { line->v0.x, (line->v0.y + line->v1.y) / 2, line->v0.z };
-            constexpr D3DVECTOR upVec = {0,1,0};
-
-            const Vertex camera = { GetInGameCameraPosX(), GetInGameCameraPosY(), GetInGameCameraPosZ() };
-            D3DVECTOR toCam = { camera.x - center.x, camera.y - center.y, camera.z - center.z };
-            toCam = normalize(toCam);
-
-            const D3DVECTOR rightVec = normalize(cross(upVec, toCam));
-
-            Vertex v0 = line->v0;
-            Vertex v1 = line->v0;
-            Vertex v2 = line->v1;
-            Vertex v3 = line->v1;
-            
-            v0.x += rightVec.x * (width / 2);
-            v0.y += rightVec.y * (width / 2);
-            v0.z += rightVec.z * (width / 2);
-
-            v1.x -= rightVec.x * (width / 2);
-            v1.y -= rightVec.y * (width / 2);
-            v1.z -= rightVec.z * (width / 2);
-
-            v2.x += rightVec.x * (width / 2);
-            v2.y += rightVec.y * (width / 2);
-            v2.z += rightVec.z * (width / 2);
-
-            v3.x -= rightVec.x * (width / 2);
-            v3.y -= rightVec.y * (width / 2);
-            v3.z -= rightVec.z * (width / 2);
-
-            triList.push_back({ v3, v1, v0 });
-            triList.push_back({ v0, v2, v3 });
-        }
-
         g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size(), triList.data(), 16);
-        // END NEW CODE
-
         //g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &vertexStreamZeroData_963880, 16);
 
         g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
@@ -132,22 +134,24 @@ void drawDrips(UINT primCount)
     }
 }
 
+UINT primCountBackup = 0;
+std::vector<Triangle> triListBackup;
+
 void hookDrawDrips()
 {
     UINT primCount;
     __asm mov primCount, esi
 
-    // Toggle me in debugger to switch between original and reimpl
-    static bool reimplDrips = true;
+    primCountBackup = primCount;
+    triListBackup = transformDrips(primCount);
+}
 
-    if (reimplDrips) {
-        drawDrips(primCount);
-    }
-    else
-    {
-        __asm mov esi, primCount
-        originalDrawDrips();
-    }
+auto originalDrawTransGeom = reinterpret_cast<void(*)(void*)>(0x5AFEE0);
+
+void __cdecl hookDrawTransGeom(void* pTransGeom)
+{
+    originalDrawTransGeom(pTransGeom);
+    drawDrips(primCountBackup, triListBackup);
 }
 
 void PatchDrips()
@@ -157,6 +161,8 @@ void PatchDrips()
     case SH2V_10:
         WriteCalltoMemory((BYTE*)0x4EE4C6, hookDrawDrips);
         WriteCalltoMemory((BYTE*)0x4EE8E0, hookDrawDrips);
+
+        WriteCalltoMemory((BYTE*)0x4762A5, hookDrawTransGeom);
         break;
     case SH2V_11:
         Logging::Log() << __FUNCTION__ << " Error: not implemented for v1.1!";
