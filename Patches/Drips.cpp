@@ -51,7 +51,7 @@ std::vector<Triangle> transformDrips(UINT primCount)
     for (size_t i = 0; i < primCount; i++) {
         Line* line = &(&vertexStreamZeroData_963880)[i];
 
-        // TODO: Move to vertex shader
+        // TODO: Move billboarding to vertex shader
         const Vertex center = { line->v0.x, (line->v0.y + line->v1.y) / 2, line->v0.z };
         constexpr D3DVECTOR upVec = { 0,1,0 };
 
@@ -63,27 +63,27 @@ std::vector<Triangle> transformDrips(UINT primCount)
 
         Vertex v0 = line->v0;
         Vertex v1 = line->v0;
-        Vertex v2 = line->v1;
+        Vertex v2 = line->v0;
         Vertex v3 = line->v1;
 
+        // TODO: If James facing and flashlight on, increase alpha
+        v0.diffuse = line->v1.diffuse;
+        v2.diffuse = line->v1.diffuse;
+
+        // Build drop triangles
+        constexpr float SHOULDER_RATIO = 0.97f;
+        float dropShoulder = (line->v1.y - line->v0.y) * SHOULDER_RATIO;
+
         v0.x += rightVec.x * (width / 2);
-        v0.y += rightVec.y * (width / 2);
+        v0.y += dropShoulder + (rightVec.y * (width / 2));
         v0.z += rightVec.z * (width / 2);
 
-        v1.x -= rightVec.x * (width / 2);
-        v1.y -= rightVec.y * (width / 2);
-        v1.z -= rightVec.z * (width / 2);
+        v2.x -= rightVec.x * (width / 2);
+        v2.y -= dropShoulder + (rightVec.y * (width / 2));
+        v2.z -= rightVec.z * (width / 2);
 
-        v2.x += rightVec.x * (width / 2);
-        v2.y += rightVec.y * (width / 2);
-        v2.z += rightVec.z * (width / 2);
-
-        v3.x -= rightVec.x * (width / 2);
-        v3.y -= rightVec.y * (width / 2);
-        v3.z -= rightVec.z * (width / 2);
-
-        triList.push_back({ v3, v1, v0 });
-        triList.push_back({ v0, v2, v3 });
+        triList.push_back({ v2, v1, v0 });
+        triList.push_back({ v0, v3, v2 });
     }
 
     return triList;
