@@ -48,10 +48,10 @@ struct TransGeom
     TransGeomTexture* pTextures;
 };
 
-static auto flashlightAvailable = reinterpret_cast<BOOL (*)()>(0x48C390);
 static auto originalDrawDrips = reinterpret_cast<void (*)(/* UINT primCount */)>(0x4EDE20);
 static auto originalDrawTransGeom = reinterpret_cast<void (*)(TransGeom*)>(0x5AFEE0);
 
+BYTE& flashlightAvailable = *reinterpret_cast<BYTE*>(0x942BF0);
 IDirect3DDevice8*& g_d3d8Device_A32894 = *reinterpret_cast<IDirect3DDevice8**>(0xA32894);
 float& g_jamesRotation_1FB1030 = *reinterpret_cast<float*>(0x1FB1030);
 Line& vertexStreamZeroData_963880 = *reinterpret_cast<Line*>(0x963880);
@@ -109,7 +109,7 @@ std::vector<Triangle> transformDrips(UINT primCount)
         float dropAngle = (f.x * d.x + f.z * d.z) / std::sqrt(d.x * d.x + d.z * d.z);
         bool isLit = dropAngle >= std::sqrt(2) / 2;
 
-        if (isLit && GetFlashlightSwitch() && flashlightAvailable())
+        if (isLit && GetFlashlightSwitch() && flashlightAvailable != 1)
         {
             constexpr unsigned char litAlpha = 255;
             v0.diffuse = (v0.diffuse & 0x00FFFFFF) | (litAlpha << 24);
