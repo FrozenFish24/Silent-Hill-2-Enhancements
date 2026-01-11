@@ -201,7 +201,7 @@
 	visit(SpeedrunMode, 0)
 
 #define VISIT_FLOAT_SETTINGS(visit) \
-	visit(DropletSize, 8.0f) \
+	visit(DropletSize, 2.0f) \
 	visit(fog_layer1_x1, 0.250f) \
 	visit(fog_layer1_x2, 0.250f) \
 	visit(fog_layer1_y1, 0.125f) \
