@@ -1,6 +1,5 @@
 ﻿#include "Drips.h"
-#include <cstring>
-#include <algorithm>
+#include <vector>
 #include "Common\Utils.h"
 #include "Logging\Logging.h"
 #include "Patches\Patches.h"
@@ -56,13 +55,16 @@ IDirect3DDevice8*& g_d3d8Device_A32894 = *reinterpret_cast<IDirect3DDevice8**>(0
 float& g_jamesRotation_1FB1030 = *reinterpret_cast<float*>(0x1FB1030);
 Line& vertexStreamZeroData_963880 = *reinterpret_cast<Line*>(0x963880);
 
-inline D3DVECTOR normalize(const D3DVECTOR& vec)
+static UINT primCountBackup = 0;
+static std::vector<Triangle> triListBackup;
+
+static inline D3DVECTOR normalize(const D3DVECTOR& vec)
 {
     float magnitude = std::sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
     return { vec.x / magnitude, vec.y / magnitude, vec.z / magnitude };
 }
 
-inline D3DVECTOR cross(const D3DVECTOR& a, const D3DVECTOR& b)
+static inline D3DVECTOR cross(const D3DVECTOR& a, const D3DVECTOR& b)
 {
     return {
         a.y * b.z - a.z * b.y,
@@ -77,7 +79,7 @@ Triangle DEBUG_flashlightBeam(float angle);
 // TODO: Move billboarding into vertex shader
 // TODO: Move lighting into pixel shader
 // TODO: Angle based brightness fall-off
-std::vector<Triangle> transformDrips(UINT primCount)
+static std::vector<Triangle> transformDrips(UINT primCount)
 {
     if (primCount == 0)
         return {};
@@ -194,12 +196,57 @@ Triangle DEBUG_flashlightBeam(float angle)
     return { origin, leftPoint, rightPoint };
 }
 
-void drawDrips(UINT primCount, std::vector<Triangle> triList)
+void drawDrips()
 {
     D3DMATRIX worldMatrix;
 
-    if (primCount > 0)
+    if (primCountBackup > 0)
     {
+        DWORD lighting = 0;
+        DWORD fogEnable = 0;
+        DWORD zWriteEnable = 0;
+        DWORD alphaBlendEnable = 0;
+        DWORD srcBlend = 0;
+        DWORD destBlend = 0;
+        DWORD fogVertexMode = 0;
+        DWORD colorVertex = 0;
+        DWORD diffuseMaterialSource = 0;
+        DWORD emissiveMaterialSource = 0;
+
+        IDirect3DBaseTexture8* texture = nullptr;
+
+        DWORD st0ColorOp = 0;
+        DWORD st0ColorArg1 = 0;
+        DWORD st0AlphaOp = 0;
+        DWORD st0AlphaArg1 = 0;
+        DWORD st1ColorOp = 0;
+        DWORD st1AlphaOp = 0;
+
+        D3DMATRIX transform = {};
+        DWORD hVs = 0;
+
+        g_d3d8Device_A32894->GetRenderState(D3DRS_LIGHTING, &lighting);
+        g_d3d8Device_A32894->GetRenderState(D3DRS_FOGENABLE, &fogEnable);
+        g_d3d8Device_A32894->GetRenderState(D3DRS_ZWRITEENABLE, &zWriteEnable);
+        g_d3d8Device_A32894->GetRenderState(D3DRS_ALPHABLENDENABLE, &alphaBlendEnable);
+        g_d3d8Device_A32894->GetRenderState(D3DRS_SRCBLEND, &srcBlend);
+        g_d3d8Device_A32894->GetRenderState(D3DRS_DESTBLEND, &destBlend);
+        g_d3d8Device_A32894->GetRenderState(D3DRS_FOGVERTEXMODE, &fogVertexMode);
+        g_d3d8Device_A32894->GetRenderState(D3DRS_COLORVERTEX, &colorVertex);
+        g_d3d8Device_A32894->GetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, &diffuseMaterialSource);
+        g_d3d8Device_A32894->GetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, &emissiveMaterialSource);
+
+        g_d3d8Device_A32894->GetTexture(0, &texture);
+        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_COLOROP, &st0ColorOp);
+        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_COLORARG1, &st0ColorArg1);
+        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_ALPHAOP, &st0AlphaOp);
+        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_ALPHAARG1, &st0AlphaArg1);
+        g_d3d8Device_A32894->GetTextureStageState(1, D3DTSS_COLOROP, &st1ColorOp);
+        g_d3d8Device_A32894->GetTextureStageState(1, D3DTSS_ALPHAOP, &st1AlphaOp);
+
+        g_d3d8Device_A32894->GetTransform(D3DTS_WORLD, &transform);
+        g_d3d8Device_A32894->GetVertexShader(&hVs);
+
         g_d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, FALSE);
         g_d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, FALSE);
         g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -230,29 +277,42 @@ void drawDrips(UINT primCount, std::vector<Triangle> triList)
         g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &worldMatrix);
         g_d3d8Device_A32894->SetVertexShader(D3DFVF_XYZ | D3DFVF_DIFFUSE);
 
-        // NEW CODE
-        g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size(), triList.data(), 16);
-        // END NEW CODE
+        g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triListBackup.size(), triListBackup.data(), 16);
 
         //g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &vertexStreamZeroData_963880, 16);
 
-        g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, TRUE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+        g_d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, lighting);
+        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, fogEnable);
+        g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, zWriteEnable);
+        g_d3d8Device_A32894->SetRenderState(D3DRS_ALPHABLENDENABLE, alphaBlendEnable);
+        g_d3d8Device_A32894->SetRenderState(D3DRS_SRCBLEND, srcBlend);
+        g_d3d8Device_A32894->SetRenderState(D3DRS_DESTBLEND, destBlend);
+        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGVERTEXMODE, fogVertexMode);
+        g_d3d8Device_A32894->SetRenderState(D3DRS_COLORVERTEX, colorVertex);
+        g_d3d8Device_A32894->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, diffuseMaterialSource);
+        g_d3d8Device_A32894->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, emissiveMaterialSource);
+
+        g_d3d8Device_A32894->SetTexture(0, texture);
+        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLOROP, st0ColorOp);
+        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLORARG1, st0ColorArg1);
+        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAOP, st0AlphaOp);
+        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAARG1, st0AlphaArg1);
+        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_COLOROP, st1ColorOp);
+        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_ALPHAOP, st1AlphaOp);
+
+        g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &transform);
+        g_d3d8Device_A32894->SetVertexShader(hVs);
     }
 }
 
-UINT primCountBackup = 0;
-std::vector<Triangle> triListBackup;
-
-void hookDrawDrips()
+static void hookDrawDrips()
 {
     UINT primCount;
     __asm mov primCount, esi
     
     primCountBackup = primCount;
     triListBackup = transformDrips(primCount);
-
+    
     // Toggle me in debugger to switch between original and reimpl
     //static bool reimplDrips = true;
 
@@ -272,21 +332,8 @@ void __cdecl hookDrawTransGeom(TransGeom* pTransGeom)
     if (!skipDraw)
         originalDrawTransGeom(pTransGeom);
 
-    drawDrips(primCountBackup, triListBackup);
+    drawDrips();
 }
-
-//void* addr = reinterpret_cast<void*>(0x5B0008);
-//
-//__declspec(naked) void __stdcall coolHook() noexcept
-//{
-//    drawDrips(primCountBackup, triListBackup);
-//
-//    __asm {
-//        mov eax, [ebp+4]
-//        cmp eax, 0x7FFFFFFF
-//        jmp addr
-//    }
-//}
 
 void PatchDrips()
 {
@@ -297,7 +344,6 @@ void PatchDrips()
         WriteCalltoMemory((BYTE*)0x4EE8E0, hookDrawDrips);
 
         WriteCalltoMemory((BYTE*)0x4762A5, hookDrawTransGeom);
-        //WriteJMPtoMemory((BYTE*)0x5B0000, coolHook, 8);
         break;
     case SH2V_11:
         Logging::Log() << __FUNCTION__ << " Error: not implemented for v1.1!";
