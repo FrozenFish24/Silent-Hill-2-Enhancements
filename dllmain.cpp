@@ -853,6 +853,24 @@ void DelayedStart()
 	{
 		PatchEddieLauraCutscene();
 	}
+
+	// TODO: Make a proper option
+	constexpr bool HospitalCourtyardRain = true;
+	if (HospitalCourtyardRain)
+	{
+		switch (GameVersion)
+		{
+		case SH2V_10:
+			UpdateMemoryAddress((void*)0x58BDD1, "\x90\x90", 2);
+			break;
+		case SH2V_11:
+			UpdateMemoryAddress((void*)0x58C681, "\x90\x90", 2);
+			break;
+		case SH2V_DC:
+			UpdateMemoryAddress((void*)0x58BFA1, "\x90\x90", 2);
+			break;
+		}
+	}
 	
 	// Remove the "Now loading..." and "Press Return to continue." messages
 	if (DisableLoadingPressReturnMessages)
