@@ -22,41 +22,52 @@ struct Triangle {
     Vertex v0, v1, v2;
 };
 
-struct TransGeomTexture
+struct DrawCallType26
 {
-    IDirect3DBaseTexture8* pTexture;
-    int type;
-    IDirect3DBaseTexture8* tex0;
-    IDirect3DBaseTexture8* tex1;
-    IDirect3DVertexBuffer8* vbuf0;
-    IDirect3DBaseTexture8* tex2;
+    IDirect3DBaseTexture8* texture;
+    DWORD vsHandle;
+    unsigned __int16 stride;
     unsigned __int16 primitiveCount;
+    unsigned __int8 colorOpIndex;
+    unsigned __int8 alphaOpIndex;
+    unsigned __int8 unk_16;
+    unsigned __int8 unk_17;
+    void* vertices;
     void* vertexStreamZeroData;
     unsigned __int16 unk_20;
-    unsigned __int16 stride;
-    unsigned __int8 unk_22;
-    unsigned __int8 unk_23;
+    unsigned __int16 unk_22;
+    unsigned __int8 unk_24;
+    unsigned __int8 unk_25;
     int unknown_24[13];
 };
 
-struct TransGeom
+// A tagged union of possible draw call variants
+struct DrawCallNode
 {
-    int unknown_00;
-    int unknown_04;
-    int unknown_08;
-    TransGeomTexture* pTextures;
+    DrawCallNode* pNext;
+    int type;
+    union {
+        DrawCallType26 type26;
+    };
 };
 
+struct DrawCalls
+{
+    void* unknown_00;
+    void* unknown_04;
+    void* unknown_08;
+    DrawCallNode* geometryList;
+};
+
+static std::vector<Triangle> triList;
+
 static auto originalDrawDrips = reinterpret_cast<void (*)(/* UINT primCount */)>(0x4EDE20);
-static auto originalDrawTransGeom = reinterpret_cast<void (*)(TransGeom*)>(0x5AFEE0);
+static auto originalDrawTransGeom = reinterpret_cast<void (*)(DrawCalls*)>(0x5AFEE0);
 
 BYTE& flashlightAvailable = *reinterpret_cast<BYTE*>(0x942BF0);
 IDirect3DDevice8*& g_d3d8Device_A32894 = *reinterpret_cast<IDirect3DDevice8**>(0xA32894);
 float& g_jamesRotation_1FB1030 = *reinterpret_cast<float*>(0x1FB1030);
 Line& vertexStreamZeroData_963880 = *reinterpret_cast<Line*>(0x963880);
-
-static UINT primCountBackup = 0;
-static std::vector<Triangle> triListBackup;
 
 static inline D3DVECTOR normalize(const D3DVECTOR& vec)
 {
@@ -75,19 +86,16 @@ static inline D3DVECTOR cross(const D3DVECTOR& a, const D3DVECTOR& b)
 
 Triangle DEBUG_flashlightBeam(float angle);
 
-// BUG: Is the bottom vert billboarding correctly?
-// TODO: Move billboarding into vertex shader
-// TODO: Move lighting into pixel shader
 // TODO: Angle based brightness fall-off
-static std::vector<Triangle> transformDrips(UINT primCount)
+static void transformDrips(UINT primCount)
 {
     if (primCount == 0)
-        return {};
+        return;
 
-    std::vector<Triangle> triList;
+    triList.clear();
     const float width = DropletSize;
 
-    // TODO: This seems wrong
+    // TODO: There's probably a better way
     float angle = -g_jamesRotation_1FB1030 + (3.1415927f * 0.5f);
 
     for (size_t i = 0; i < primCount; i++)
@@ -139,7 +147,6 @@ static std::vector<Triangle> transformDrips(UINT primCount)
         }
 
         // Build raindrop triangles
-        // TODO: Move billboarding to a vertex shader?
         const Vertex center = { line->v0.x, (line->v0.y + line->v1.y) / 2, line->v0.z };
         constexpr D3DVECTOR upVec = { 0.0f, 1.0f, 0.0f };
 
@@ -171,15 +178,10 @@ static std::vector<Triangle> transformDrips(UINT primCount)
     {
         triList.push_back(DEBUG_flashlightBeam(angle));
     }
-
-    return triList;
 }
 
 Triangle DEBUG_flashlightBeam(float angle)
 {
-    // TODO: Look into this var from Flashlight Reflection patch
-    // g_FlashLightPos = reinterpret_cast<float*>(0x1FB7D18);
-
     constexpr float height = -680.0f;
     constexpr float range = 3000.0f;
 
@@ -196,128 +198,127 @@ Triangle DEBUG_flashlightBeam(float angle)
     return { origin, leftPoint, rightPoint };
 }
 
-void drawDrips()
-{
-    D3DMATRIX worldMatrix;
-
-    if (primCountBackup > 0)
-    {
-        DWORD lighting = 0;
-        DWORD fogEnable = 0;
-        DWORD zWriteEnable = 0;
-        DWORD alphaBlendEnable = 0;
-        DWORD srcBlend = 0;
-        DWORD destBlend = 0;
-        DWORD fogVertexMode = 0;
-        DWORD colorVertex = 0;
-        DWORD diffuseMaterialSource = 0;
-        DWORD emissiveMaterialSource = 0;
-
-        IDirect3DBaseTexture8* texture = nullptr;
-
-        DWORD st0ColorOp = 0;
-        DWORD st0ColorArg1 = 0;
-        DWORD st0AlphaOp = 0;
-        DWORD st0AlphaArg1 = 0;
-        DWORD st1ColorOp = 0;
-        DWORD st1AlphaOp = 0;
-
-        D3DMATRIX transform = {};
-        DWORD hVs = 0;
-
-        g_d3d8Device_A32894->GetRenderState(D3DRS_LIGHTING, &lighting);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_FOGENABLE, &fogEnable);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_ZWRITEENABLE, &zWriteEnable);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_ALPHABLENDENABLE, &alphaBlendEnable);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_SRCBLEND, &srcBlend);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_DESTBLEND, &destBlend);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_FOGVERTEXMODE, &fogVertexMode);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_COLORVERTEX, &colorVertex);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, &diffuseMaterialSource);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, &emissiveMaterialSource);
-
-        g_d3d8Device_A32894->GetTexture(0, &texture);
-        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_COLOROP, &st0ColorOp);
-        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_COLORARG1, &st0ColorArg1);
-        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_ALPHAOP, &st0AlphaOp);
-        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_ALPHAARG1, &st0AlphaArg1);
-        g_d3d8Device_A32894->GetTextureStageState(1, D3DTSS_COLOROP, &st1ColorOp);
-        g_d3d8Device_A32894->GetTextureStageState(1, D3DTSS_ALPHAOP, &st1AlphaOp);
-
-        g_d3d8Device_A32894->GetTransform(D3DTS_WORLD, &transform);
-        g_d3d8Device_A32894->GetVertexShader(&hVs);
-
-        g_d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, FALSE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, FALSE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_COLORVERTEX, TRUE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, D3DMCS_COLOR1);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, D3DMCS_MATERIAL);
-        
-        g_d3d8Device_A32894->SetTexture(0, NULL);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
-        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-        
-        std::memset(&worldMatrix.m[2][3], 0, 16);
-        std::memset(&worldMatrix.m[1][2], 0, 16);
-        std::memset(&worldMatrix.m[0][1], 0, 16);
-        worldMatrix._44 = 1.0;
-        worldMatrix._33 = 1.0;
-        worldMatrix._22 = 1.0;
-        worldMatrix._11 = 1.0;
-
-        g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &worldMatrix);
-        g_d3d8Device_A32894->SetVertexShader(D3DFVF_XYZ | D3DFVF_DIFFUSE);
-
-        g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triListBackup.size(), triListBackup.data(), 16);
-
-        //g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &vertexStreamZeroData_963880, 16);
-
-        g_d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, lighting);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, fogEnable);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, zWriteEnable);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_ALPHABLENDENABLE, alphaBlendEnable);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_SRCBLEND, srcBlend);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_DESTBLEND, destBlend);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGVERTEXMODE, fogVertexMode);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_COLORVERTEX, colorVertex);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, diffuseMaterialSource);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, emissiveMaterialSource);
-
-        g_d3d8Device_A32894->SetTexture(0, texture);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLOROP, st0ColorOp);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLORARG1, st0ColorArg1);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAOP, st0AlphaOp);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAARG1, st0AlphaArg1);
-        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_COLOROP, st1ColorOp);
-        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_ALPHAOP, st1AlphaOp);
-
-        g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &transform);
-        g_d3d8Device_A32894->SetVertexShader(hVs);
-    }
-}
+//void drawDrips()
+//{
+//    D3DMATRIX worldMatrix;
+//
+//    if (primCountBackup > 0)
+//    {
+//        DWORD lighting = 0;
+//        DWORD fogEnable = 0;
+//        DWORD zWriteEnable = 0;
+//        DWORD alphaBlendEnable = 0;
+//        DWORD srcBlend = 0;
+//        DWORD destBlend = 0;
+//        DWORD fogVertexMode = 0;
+//        DWORD colorVertex = 0;
+//        DWORD diffuseMaterialSource = 0;
+//        DWORD emissiveMaterialSource = 0;
+//
+//        IDirect3DBaseTexture8* texture = nullptr;
+//
+//        DWORD st0ColorOp = 0;
+//        DWORD st0ColorArg1 = 0;
+//        DWORD st0AlphaOp = 0;
+//        DWORD st0AlphaArg1 = 0;
+//        DWORD st1ColorOp = 0;
+//        DWORD st1AlphaOp = 0;
+//
+//        D3DMATRIX transform = {};
+//        DWORD hVs = 0;
+//
+//        g_d3d8Device_A32894->GetRenderState(D3DRS_LIGHTING, &lighting);
+//        g_d3d8Device_A32894->GetRenderState(D3DRS_FOGENABLE, &fogEnable);
+//        g_d3d8Device_A32894->GetRenderState(D3DRS_ZWRITEENABLE, &zWriteEnable);
+//        g_d3d8Device_A32894->GetRenderState(D3DRS_ALPHABLENDENABLE, &alphaBlendEnable);
+//        g_d3d8Device_A32894->GetRenderState(D3DRS_SRCBLEND, &srcBlend);
+//        g_d3d8Device_A32894->GetRenderState(D3DRS_DESTBLEND, &destBlend);
+//        g_d3d8Device_A32894->GetRenderState(D3DRS_FOGVERTEXMODE, &fogVertexMode);
+//        g_d3d8Device_A32894->GetRenderState(D3DRS_COLORVERTEX, &colorVertex);
+//        g_d3d8Device_A32894->GetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, &diffuseMaterialSource);
+//        g_d3d8Device_A32894->GetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, &emissiveMaterialSource);
+//
+//        g_d3d8Device_A32894->GetTexture(0, &texture);
+//        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_COLOROP, &st0ColorOp);
+//        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_COLORARG1, &st0ColorArg1);
+//        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_ALPHAOP, &st0AlphaOp);
+//        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_ALPHAARG1, &st0AlphaArg1);
+//        g_d3d8Device_A32894->GetTextureStageState(1, D3DTSS_COLOROP, &st1ColorOp);
+//        g_d3d8Device_A32894->GetTextureStageState(1, D3DTSS_ALPHAOP, &st1AlphaOp);
+//
+//        g_d3d8Device_A32894->GetTransform(D3DTS_WORLD, &transform);
+//        g_d3d8Device_A32894->GetVertexShader(&hVs);
+//
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, FALSE);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, FALSE);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_COLORVERTEX, TRUE);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, D3DMCS_COLOR1);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, D3DMCS_MATERIAL);
+//        
+//        g_d3d8Device_A32894->SetTexture(0, NULL);
+//        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+//        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+//        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+//        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+//        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+//        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+//        
+//        std::memset(&worldMatrix.m[2][3], 0, 16);
+//        std::memset(&worldMatrix.m[1][2], 0, 16);
+//        std::memset(&worldMatrix.m[0][1], 0, 16);
+//        worldMatrix._44 = 1.0;
+//        worldMatrix._33 = 1.0;
+//        worldMatrix._22 = 1.0;
+//        worldMatrix._11 = 1.0;
+//
+//        g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &worldMatrix);
+//        g_d3d8Device_A32894->SetVertexShader(D3DFVF_XYZ | D3DFVF_DIFFUSE);
+//
+//        g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triListBackup.size(), triListBackup.data(), 16);
+//
+//        //g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &vertexStreamZeroData_963880, 16);
+//
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, lighting);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, fogEnable);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, zWriteEnable);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_ALPHABLENDENABLE, alphaBlendEnable);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_SRCBLEND, srcBlend);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_DESTBLEND, destBlend);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGVERTEXMODE, fogVertexMode);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_COLORVERTEX, colorVertex);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, diffuseMaterialSource);
+//        g_d3d8Device_A32894->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, emissiveMaterialSource);
+//
+//        g_d3d8Device_A32894->SetTexture(0, texture);
+//        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLOROP, st0ColorOp);
+//        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLORARG1, st0ColorArg1);
+//        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAOP, st0AlphaOp);
+//        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAARG1, st0AlphaArg1);
+//        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_COLOROP, st1ColorOp);
+//        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_ALPHAOP, st1AlphaOp);
+//
+//        g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &transform);
+//        g_d3d8Device_A32894->SetVertexShader(hVs);
+//    }
+//}
 
 static void hookDrawDrips()
 {
     UINT primCount;
     __asm mov primCount, esi
     
-    primCountBackup = primCount;
-    triListBackup = transformDrips(primCount);
+    transformDrips(primCount);
     
     // Toggle me in debugger to switch between original and reimpl
     //static bool reimplDrips = true;
 
     //if (reimplDrips) {
-    //    drawDrips(primCount, triList);
+    //    drawDrips();
     //}
     //else
     //{
@@ -326,13 +327,26 @@ static void hookDrawDrips()
     //}
 }
 
-void __cdecl hookDrawTransGeom(TransGeom* pTransGeom)
+void __cdecl hookDrawTransGeom(DrawCalls* pDrawCalls)
 {
-    static bool skipDraw = false;
-    if (!skipDraw)
-        originalDrawTransGeom(pTransGeom);
+    DrawCallNode rain = {};
+    rain.type = D3DPT_TRIANGLELIST + 22;
+    rain.type26.vsHandle = D3DFVF_XYZ | D3DFVF_DIFFUSE;
+    rain.type26.vertices = triList.data();
+    rain.type26.primitiveCount = static_cast<unsigned short>(triList.size());
+    rain.type26.stride = 16;
 
-    drawDrips();
+    // Add rain node to the end of the draw call list
+    DrawCallNode* node = pDrawCalls->geometryList;
+    while (node->pNext)
+        node = node->pNext;
+
+    node->pNext = &rain;
+
+    originalDrawTransGeom(pDrawCalls);
+
+    // Remove rain from the linked list in case it is freed elsewhere
+    node->pNext = nullptr;
 }
 
 void PatchDrips()
