@@ -44,7 +44,7 @@ struct DrawCallType2C
 {
     void(__cdecl *func)(DWORD);
     DWORD arg;
-    DWORD pad;
+    DWORD pad; // Unused
     void(*setup)();
 };
 
@@ -240,7 +240,7 @@ Triangle DEBUG_flashlightBeam(float angle)
     return { origin, leftPoint, rightPoint };
 }
 
-void __cdecl drawDrips(DWORD /*arg*/)
+void drawDrips(DWORD /*arg*/)
 {
     D3DMATRIX worldMatrix;
 
@@ -373,17 +373,27 @@ void __cdecl hookDrawTransGeom(DrawCalls* pDrawCalls)
     rain.type2C.func = drawDrips;
     rain.type2C.arg = 0;
 
-    // Add rain node to the end of the draw call list
-    DrawCallNode* node = pDrawCalls->head;
-    while (node->pNext)
-        node = node->pNext;
+    // Insert rain NODES_FROM_TAIL nodes from the end of the draw call list
+    constexpr int NODES_FROM_TAIL = 9;
+    DrawCallNode* slow = pDrawCalls->head;
+    DrawCallNode* fast = pDrawCalls->head;
 
-    node->pNext = &rain;
+    // Move fast pointer NODES_FROM_TAIL nodes ahead
+    for (int i = 0; fast->pNext && i < NODES_FROM_TAIL; i++)
+        fast = fast->pNext;
+
+    while (fast->pNext) {
+        slow = slow->pNext;
+        fast = fast->pNext;
+    }
+
+    rain.pNext = slow->pNext;
+    slow->pNext = &rain;
 
     originalDrawTransGeom(pDrawCalls);
 
     // Remove rain from the linked list in case the game tries to free it later
-    node->pNext = nullptr;
+    slow->pNext = rain.pNext;
 }
 
 void PatchDrips()
