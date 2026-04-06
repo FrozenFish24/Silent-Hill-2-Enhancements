@@ -38,9 +38,23 @@ struct DrawCallType33
     D3DMATRIX matrix; // Not used in types less than 33
 };
 
+enum class DrawCallType {
+    Nop = 0x7FFFFFFF,
+    Custom = 0x2C,
+    type2D = 0x2D,
+    type2E = 0x2E,
+    type22 = 22,
+    type33 = 33
+};
+
+// Draws nothing
+struct DrawCallTypeNop
+{
+};
+
 // Seems to just call func with the provided arg. For fully custom rendering logic?
 // If a specific local var in drawTransGeom is non-zero (probably a bitfield) it may also run setup and a bunch of other setup logic
-struct DrawCallType2C
+struct DrawCallTypeCustom
 {
     void(__cdecl *func)(DWORD);
     DWORD arg;
@@ -79,9 +93,10 @@ struct DrawCallType2E
 struct DrawCallNode
 {
     DrawCallNode* pNext;
-    int type;
+    DrawCallType type;
     union {
-        DrawCallType2C type2C;
+        DrawCallTypeNop typeNop;
+        DrawCallTypeCustom type2C;
         DrawCallType2D type2D;
         DrawCallType2E type2E;
         DrawCallType33 type33;
@@ -103,6 +118,7 @@ BYTE& flashlightAvailable = *reinterpret_cast<BYTE*>(0x942BF0);
 IDirect3DDevice8*& g_d3d8Device_A32894 = *reinterpret_cast<IDirect3DDevice8**>(0xA32894);
 float& g_jamesRotation_1FB1030 = *reinterpret_cast<float*>(0x1FB1030);
 Line& vertexStreamZeroData_963880 = *reinterpret_cast<Line*>(0x963880);
+D3DVECTOR& forwardVec_1FB7D28 = *reinterpret_cast<D3DVECTOR*>(0x1FB7D28);
 
 static UINT primCountBackup = 0;
 static std::vector<Triangle> triListBackup;
@@ -122,7 +138,7 @@ static inline D3DVECTOR cross(const D3DVECTOR& a, const D3DVECTOR& b)
     };
 }
 
-Triangle DEBUG_flashlightBeam(float angle);
+Triangle DEBUG_flashlightBeam(const D3DVECTOR& fwd);
 
 // TODO: Move billboarding into vertex shader
 // TODO: Move lighting into pixel shader
@@ -134,9 +150,6 @@ static std::vector<Triangle> transformDrips(UINT primCount)
 
     std::vector<Triangle> triList;
     const float width = DropletSize;
-
-    // TODO: There's probably a better way
-    float angle = -g_jamesRotation_1FB1030 + (3.1415927f * 0.5f);
 
     for (size_t i = 0; i < primCount; i++)
     {
@@ -151,7 +164,7 @@ static std::vector<Triangle> transformDrips(UINT primCount)
         v2.diffuse = line->v1.diffuse;
 
         // James forward direction vector
-        D3DVECTOR f = { std::cos(angle), 0.0f, std::sin(angle) };
+        D3DVECTOR f = { forwardVec_1FB7D28.x, 0.0f, forwardVec_1FB7D28.z };
 
         // Direction vector to raindrop
         D3DVECTOR d = { v0.x - james.x, 0.0f, v0.z - james.z };
@@ -216,22 +229,21 @@ static std::vector<Triangle> transformDrips(UINT primCount)
 
     if (DEBUG_DrawFlashlightBeam)
     {
-        triList.push_back(DEBUG_flashlightBeam(angle));
+        triList.push_back(DEBUG_flashlightBeam({ forwardVec_1FB7D28.x, 0.0f, forwardVec_1FB7D28.z }));
     }
 
     return triList;
 }
 
-Triangle DEBUG_flashlightBeam(float angle)
+Triangle DEBUG_flashlightBeam(const D3DVECTOR& fwd)
 {
     constexpr float height = -680.0f;
     constexpr float range = 3000.0f;
 
-    float leftAngle = angle - (3.1415927f / 4.0f);
-    float rightAngle = angle + (3.1415927f / 4.0f);
+    constexpr float halfFOV = 3.1415927f / 4.0f;
 
-    D3DVECTOR left = { std::cos(leftAngle), 0.0f, std::sin(leftAngle) };
-    D3DVECTOR right = { std::cos(rightAngle), 0.0f, std::sin(rightAngle) };
+    D3DVECTOR left = { fwd.x * std::cos(-halfFOV) - fwd.z * std::sin(-halfFOV), 0.0f, fwd.x * std::sin(-halfFOV) + fwd.z * std::cos(-halfFOV) };
+    D3DVECTOR right = { fwd.x * std::cos(halfFOV) - fwd.z * std::sin(halfFOV), 0.0f, fwd.x * std::sin(halfFOV) + fwd.z * std::cos(halfFOV) };
 
     const Vertex origin = { GetJamesPosX(), GetJamesPosY() + height, GetJamesPosZ(), D3DCOLOR_ARGB(128, 0, 0, 255) };
     const Vertex leftPoint = { origin.x + left.x * range, origin.y, origin.z + left.z * range, D3DCOLOR_ARGB(128, 0, 0, 255) };
@@ -370,6 +382,7 @@ static void hookDrawDrips()
 void __cdecl hookDrawTransGeom(DrawCalls* pDrawCalls)
 {
     DrawCallNode rain = {};
+    rain.type = DrawCallType::Custom;
     rain.type2C.func = drawDrips;
     rain.type2C.arg = 0;
 
