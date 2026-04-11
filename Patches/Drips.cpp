@@ -142,51 +142,6 @@ static void drawDrips(std::vector<Triangle>& triList)
 
     if (triList.size() > 0)
     {
-        DWORD lighting = 0;
-        DWORD fogEnable = 0;
-        DWORD zWriteEnable = 0;
-        DWORD alphaBlendEnable = 0;
-        DWORD srcBlend = 0;
-        DWORD destBlend = 0;
-        DWORD fogVertexMode = 0;
-        DWORD colorVertex = 0;
-        DWORD diffuseMaterialSource = 0;
-        DWORD emissiveMaterialSource = 0;
-
-        IDirect3DBaseTexture8* texture = nullptr;
-
-        DWORD st0ColorOp = 0;
-        DWORD st0ColorArg1 = 0;
-        DWORD st0AlphaOp = 0;
-        DWORD st0AlphaArg1 = 0;
-        DWORD st1ColorOp = 0;
-        DWORD st1AlphaOp = 0;
-
-        D3DMATRIX transform = {};
-        DWORD hVs = 0;
-
-        g_d3d8Device_A32894->GetRenderState(D3DRS_LIGHTING, &lighting);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_FOGENABLE, &fogEnable);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_ZWRITEENABLE, &zWriteEnable);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_ALPHABLENDENABLE, &alphaBlendEnable);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_SRCBLEND, &srcBlend);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_DESTBLEND, &destBlend);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_FOGVERTEXMODE, &fogVertexMode);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_COLORVERTEX, &colorVertex);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, &diffuseMaterialSource);
-        g_d3d8Device_A32894->GetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, &emissiveMaterialSource);
-
-        g_d3d8Device_A32894->GetTexture(0, &texture);
-        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_COLOROP, &st0ColorOp);
-        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_COLORARG1, &st0ColorArg1);
-        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_ALPHAOP, &st0AlphaOp);
-        g_d3d8Device_A32894->GetTextureStageState(0, D3DTSS_ALPHAARG1, &st0AlphaArg1);
-        g_d3d8Device_A32894->GetTextureStageState(1, D3DTSS_COLOROP, &st1ColorOp);
-        g_d3d8Device_A32894->GetTextureStageState(1, D3DTSS_ALPHAOP, &st1AlphaOp);
-
-        g_d3d8Device_A32894->GetTransform(D3DTS_WORLD, &transform);
-        g_d3d8Device_A32894->GetVertexShader(&hVs);
-
         g_d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, FALSE);
         g_d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, FALSE);
         g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -217,28 +172,6 @@ static void drawDrips(std::vector<Triangle>& triList)
 
         g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size(), triList.data(), 16);
         //g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &vertexStreamZeroData_963880, 16);
-
-        g_d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, lighting);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, fogEnable);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, zWriteEnable);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_ALPHABLENDENABLE, alphaBlendEnable);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_SRCBLEND, srcBlend);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_DESTBLEND, destBlend);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGVERTEXMODE, fogVertexMode);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_COLORVERTEX, colorVertex);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, diffuseMaterialSource);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, emissiveMaterialSource);
-
-        g_d3d8Device_A32894->SetTexture(0, texture);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLOROP, st0ColorOp);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLORARG1, st0ColorArg1);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAOP, st0AlphaOp);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAARG1, st0AlphaArg1);
-        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_COLOROP, st1ColorOp);
-        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_ALPHAOP, st1AlphaOp);
-
-        g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &transform);
-        g_d3d8Device_A32894->SetVertexShader(hVs);
     }
 
     triListBackup.clear();
