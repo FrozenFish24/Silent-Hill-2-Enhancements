@@ -141,7 +141,7 @@ static inline D3DVECTOR cross(const D3DVECTOR& a, const D3DVECTOR& b)
 Triangle DEBUG_flashlightBeam(const D3DVECTOR& fwd);
 
 // TODO: Move billboarding into vertex shader
-// TODO: Move lighting into pixel shader
+// TODO: Move lighting into vertex shader
 // TODO: Angle based brightness fall-off
 static std::vector<Triangle> transformDrips(UINT primCount)
 {
@@ -356,6 +356,8 @@ void drawDrips(DWORD /*arg*/)
         g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &transform);
         g_d3d8Device_A32894->SetVertexShader(hVs);
     }
+
+    triListBackup.clear();
 }
 
 static void hookDrawDrips()
@@ -363,8 +365,9 @@ static void hookDrawDrips()
     UINT primCount;
     __asm mov primCount, esi
     
-    primCountBackup = primCount;
-    triListBackup = transformDrips(primCount);
+    // Accumulate rain in case of multiple calls (e.g. Hospital Courtyard after Flesh Lips)
+    auto rain = transformDrips(primCount);
+    triListBackup.insert(triListBackup.end(), rain.begin(), rain.end());
     
     // Toggle me in debugger to switch between original and reimpl
     //static bool reimplDrips = true;
