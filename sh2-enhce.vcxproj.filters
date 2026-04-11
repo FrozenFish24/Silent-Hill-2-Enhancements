@@ -536,6 +536,9 @@
     <ClCompile Include="Patches\Drips.cpp">
       <Filter>Patches</Filter>
     </ClCompile>
+    <ClCompile Include="Patches\RainQuads.cpp">
+      <Filter>Patches</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common\Settings.h">
@@ -781,9 +784,6 @@
     <ClInclude Include="External\Hooking\Disasm.h">
       <Filter>External\Hooking</Filter>
     </ClInclude>
-    <ClInclude Include="Patches\Drips.h">
-      <Filter>Patches</Filter>
-    </ClInclude>
     <ClInclude Include="Patches\ActorDrawingHook.h">
       <Filter>Patches</Filter>
     </ClInclude>
@@ -827,6 +827,9 @@
       <Filter>Common</Filter>
     </ClInclude>
     <ClInclude Include="Patches\DripTypes.h">
+      <Filter>Patches</Filter>
+    </ClInclude>
+    <ClInclude Include="Patches\TransparentDrawTypes.h">
       <Filter>Patches</Filter>
     </ClInclude>
   </ItemGroup>

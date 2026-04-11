@@ -860,7 +860,7 @@ void DelayedStart()
 		PatchEddieLauraCutscene();
 	}
 
-	PatchDrips();
+	PatchRainQuads();
 	
 	// Remove the "Now loading..." and "Press Return to continue." messages
 	if (DisableLoadingPressReturnMessages)

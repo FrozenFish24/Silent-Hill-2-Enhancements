@@ -1,26 +1,37 @@
-﻿#include "Drips.h"
-#include "DripTypes.h"
-#include <vector>
+﻿#include "RainQuads.h"
+#include "TransparentDrawTypes.h"
+
 #include "Common\Utils.h"
 #include "Logging\Logging.h"
 #include "Patches\Patches.h"
 #include "Common\Settings.h"
-
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#include "Wrappers\d3d8\DirectX81SDK\include\d3d8.h"
 #include "Wrappers\d3d8\DirectX81SDK\include\d3dx8.h"
+
+#include <vector>
+
+static struct Vertex {
+    float x, y, z;
+    D3DCOLOR diffuse;
+};
+
+static struct Line {
+    Vertex v0, v1;
+};
+
+static struct Triangle {
+    Vertex v0, v1, v2;
+};
 
 static std::vector<Triangle> triListBackup;
 
 // Original SH2 functions
-static auto originalDrawDrips = reinterpret_cast<void (*)(/* UINT primCount */)>(0x4EDE20);
-static auto originalDrawTransGeom = reinterpret_cast<void (*)(DrawCalls*)>(0x5AFEE0);
+static auto originalDrawRain = reinterpret_cast<void (*)(/* UINT primCount */)>(0x4EDE20);
+static auto originalDrawTransparent = reinterpret_cast<void (*)(DrawCalls*)>(0x5AFEE0);
 
 // Original SH2 variables
 static BYTE& flashlightAvailable_942BF0 = *reinterpret_cast<BYTE*>(0x942BF0);
-static Line* vertexStreamZeroData_963880 = reinterpret_cast<Line*>(0x963880);
-static IDirect3DDevice8*& g_d3d8Device_A32894 = *reinterpret_cast<IDirect3DDevice8**>(0xA32894);
+static Line* rainVerts_963880 = reinterpret_cast<Line*>(0x963880);
+static IDirect3DDevice8*& d3d8Device_A32894 = *reinterpret_cast<IDirect3DDevice8**>(0xA32894);
 static D3DVECTOR& forwardVec_1FB7D28 = *reinterpret_cast<D3DVECTOR*>(0x1FB7D28);
 
 Triangle DEBUG_flashlightBeam(const D3DVECTOR& fwd)
@@ -43,7 +54,7 @@ Triangle DEBUG_flashlightBeam(const D3DVECTOR& fwd)
 // TODO: Move billboarding into vertex shader
 // TODO: Move lighting into vertex shader
 // TODO: Angle based brightness fall-off
-static std::vector<Triangle> transformDrips(UINT primCount)
+static std::vector<Triangle> transformRain(UINT primCount)
 {
     if (primCount == 0)
         return {};
@@ -53,7 +64,7 @@ static std::vector<Triangle> transformDrips(UINT primCount)
 
     for (size_t i = 0; i < primCount; i++)
     {
-        Line line = vertexStreamZeroData_963880[i];
+        Line line = rainVerts_963880[i];
         const Vertex james = { GetJamesPosX(), GetJamesPosY(), GetJamesPosZ() };
 
         Vertex v0 = line.v0;
@@ -136,54 +147,53 @@ static std::vector<Triangle> transformDrips(UINT primCount)
     return triList;
 }
 
-static void drawDrips(std::vector<Triangle>& triList)
+static void drawRain(std::vector<Triangle>& triList)
 {
-    D3DMATRIX worldMatrix;
+    constexpr D3DMATRIX identity = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f,
+    };
 
     if (triList.size() > 0)
     {
-        g_d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, FALSE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, FALSE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_COLORVERTEX, TRUE);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, D3DMCS_COLOR1);
-        g_d3d8Device_A32894->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, D3DMCS_MATERIAL);
+        d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, FALSE);
+        d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, FALSE);
+        d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        d3d8Device_A32894->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        d3d8Device_A32894->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+        d3d8Device_A32894->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        d3d8Device_A32894->SetRenderState(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
+        d3d8Device_A32894->SetRenderState(D3DRS_COLORVERTEX, TRUE);
+        d3d8Device_A32894->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, D3DMCS_COLOR1);
+        d3d8Device_A32894->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, D3DMCS_MATERIAL);
         
-        g_d3d8Device_A32894->SetTexture(0, NULL);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-        g_d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
-        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-        g_d3d8Device_A32894->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
-        
-        worldMatrix = {};
-        worldMatrix._44 = 1.0;
-        worldMatrix._33 = 1.0;
-        worldMatrix._22 = 1.0;
-        worldMatrix._11 = 1.0;
+        d3d8Device_A32894->SetTexture(0, NULL);
+        d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+        d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+        d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+        d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+        d3d8Device_A32894->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        d3d8Device_A32894->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 
-        g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &worldMatrix);
-        g_d3d8Device_A32894->SetVertexShader(D3DFVF_XYZ | D3DFVF_DIFFUSE);
+        d3d8Device_A32894->SetTransform(D3DTS_WORLD, &identity);
+        d3d8Device_A32894->SetVertexShader(D3DFVF_XYZ | D3DFVF_DIFFUSE);
 
-        g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size(), triList.data(), 16);
-        //g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &vertexStreamZeroData_963880, 16);
+        d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size(), triList.data(), 16);
+        //d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &rainVerts_963880, 16);
     }
 
     triListBackup.clear();
 }
 
-static void hookDrawDrips()
+static void hookDrawRain()
 {
     UINT primCount;
     __asm mov primCount, esi
     
     // Accumulate rain in case of multiple calls (e.g. Hospital Courtyard after Flesh Lips)
-    auto rain = transformDrips(primCount);
+    auto rain = transformRain(primCount);
     triListBackup.insert(triListBackup.end(), rain.begin(), rain.end());
     
     // Toggle me in debugger to switch between original and reimpl
@@ -199,11 +209,11 @@ static void hookDrawDrips()
     //}
 }
 
-static void __cdecl hookDrawTransGeom(DrawCalls* pDrawCalls)
+static void hookDrawTransparent(DrawCalls* pDrawCalls)
 {
     DrawCallNode rain = {};
     rain.type = DrawCallType::Custom;
-    rain.typeCustom.func = reinterpret_cast<void(*)(DWORD)>(drawDrips);
+    rain.typeCustom.func = reinterpret_cast<void(*)(DWORD)>(drawRain);
     rain.typeCustom.arg = reinterpret_cast<DWORD>(&triListBackup);
 
     // Insert rain NODES_FROM_TAIL nodes from the end of the draw call list
@@ -223,21 +233,21 @@ static void __cdecl hookDrawTransGeom(DrawCalls* pDrawCalls)
     rain.pNext = slow->pNext;
     slow->pNext = &rain;
 
-    originalDrawTransGeom(pDrawCalls);
+    originalDrawTransparent(pDrawCalls);
 
     // Remove rain from the linked-list in case the game tries to free it later
     slow->pNext = rain.pNext;
 }
 
-void PatchDrips()
+void PatchRainQuads()
 {
     switch (GameVersion)
     {
     case SH2V_10:
-        WriteCalltoMemory((BYTE*)0x4EE4C6, hookDrawDrips);
-        WriteCalltoMemory((BYTE*)0x4EE8E0, hookDrawDrips);
+        WriteCalltoMemory(reinterpret_cast<BYTE*>(0x4EE4C6), hookDrawRain);
+        WriteCalltoMemory(reinterpret_cast<BYTE*>(0x4EE8E0), hookDrawRain);
 
-        WriteCalltoMemory((BYTE*)0x4762A5, hookDrawTransGeom);
+        WriteCalltoMemory(reinterpret_cast<BYTE*>(0x4762A5), hookDrawTransparent);
         break;
     case SH2V_11:
         Logging::Log() << __FUNCTION__ << " Error: not implemented for v1.1!";

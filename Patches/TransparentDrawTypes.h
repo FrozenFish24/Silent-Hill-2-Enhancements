@@ -3,35 +3,6 @@
 #include <Windows.h>
 #include "Wrappers\d3d8\DirectX81SDK\include\d3d8.h"
 
-struct Vertex {
-    float x, y, z;
-    D3DCOLOR diffuse;
-};
-
-struct Line {
-    Vertex v0, v1;
-};
-
-struct Triangle {
-    Vertex v0, v1, v2;
-};
-
-struct DrawCallType33
-{
-    IDirect3DBaseTexture8* texture;
-    DWORD vsHandle;
-    USHORT stride;
-    USHORT primitiveCount;
-
-    //0 = D3DTOP_SELECTARG2, 1 = D3DTOP_SUBTRACT, 2 = D3DTOP_MODULATE, 3 = D3DTOP_MODULATE2X, 4 = D3DTOP_MODULATE4X
-    BYTE colorOpIndex;
-    BYTE alphaOpIndex;
-
-    USHORT pad;
-    void* vertices;
-    D3DMATRIX matrix; // Not used in types less than 33
-};
-
 enum class DrawCallType {
     Nop = 0x7FFFFFFF,
     Custom = 0x2C,
@@ -46,8 +17,8 @@ struct DrawCallTypeNop
 {
 };
 
-// Seems to just call func with the provided arg. For fully custom rendering logic?
-// If a specific local var in drawTransGeom is non-zero (probably a bitfield) it may also run setup and a bunch of other setup logic
+// Just calls func with the provided arg (For fully custom rendering logic?)
+// If a specific local var in drawTransparent is non-zero (probably a bitfield) it may also run setup and other render state logic
 struct DrawCallTypeCustom
 {
     void(__cdecl* func)(DWORD);
@@ -81,6 +52,22 @@ struct DrawCallType2E
     USHORT primitiveCount;
     USHORT unk_1A;
     void* vertices;
+};
+
+struct DrawCallType33
+{
+    IDirect3DBaseTexture8* texture;
+    DWORD vsHandle;
+    USHORT stride;
+    USHORT primitiveCount;
+
+    //0 = D3DTOP_SELECTARG2, 1 = D3DTOP_SUBTRACT, 2 = D3DTOP_MODULATE, 3 = D3DTOP_MODULATE2X, 4 = D3DTOP_MODULATE4X
+    BYTE colorOpIndex;
+    BYTE alphaOpIndex;
+
+    USHORT pad;
+    void* vertices;
+    D3DMATRIX matrix; // Not used in types less than 33
 };
 
 // A tagged union of possible draw call variants
