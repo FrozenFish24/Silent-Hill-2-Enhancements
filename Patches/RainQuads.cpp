@@ -9,16 +9,16 @@
 
 #include <vector>
 
-static struct Vertex {
+struct Vertex {
     float x, y, z;
     D3DCOLOR diffuse;
 };
 
-static struct Line {
+struct Line {
     Vertex v0, v1;
 };
 
-static struct Triangle {
+struct Triangle {
     Vertex v0, v1, v2;
 };
 
@@ -30,19 +30,19 @@ static auto originalDrawTransparent = reinterpret_cast<void (*)(DrawCalls*)>(0x5
 
 // Original SH2 variables
 static BYTE& flashlightAvailable_942BF0 = *reinterpret_cast<BYTE*>(0x942BF0);
-static Line* rainVerts_963880 = reinterpret_cast<Line*>(0x963880);
+static Line* rainLines_963880 = reinterpret_cast<Line*>(0x963880);
 static IDirect3DDevice8*& d3d8Device_A32894 = *reinterpret_cast<IDirect3DDevice8**>(0xA32894);
-static D3DVECTOR& forwardVec_1FB7D28 = *reinterpret_cast<D3DVECTOR*>(0x1FB7D28);
+static D3DVECTOR& flashlightDirVec_1FB7D28 = *reinterpret_cast<D3DVECTOR*>(0x1FB7D28);
 
-Triangle DEBUG_flashlightBeam(const D3DVECTOR& fwd)
+static Triangle DEBUG_flashlightBeam(const D3DVECTOR& fwd)
 {
     constexpr float height = -680.0f;
     constexpr float range = 3000.0f;
 
     constexpr float halfFOV = 3.1415927f / 4.0f;
 
-    D3DVECTOR left = { fwd.x * std::cos(-halfFOV) - fwd.z * std::sin(-halfFOV), 0.0f, fwd.x * std::sin(-halfFOV) + fwd.z * std::cos(-halfFOV) };
-    D3DVECTOR right = { fwd.x * std::cos(halfFOV) - fwd.z * std::sin(halfFOV), 0.0f, fwd.x * std::sin(halfFOV) + fwd.z * std::cos(halfFOV) };
+    const D3DVECTOR left = { fwd.x * std::cos(-halfFOV) - fwd.z * std::sin(-halfFOV), 0.0f, fwd.x * std::sin(-halfFOV) + fwd.z * std::cos(-halfFOV) };
+    const D3DVECTOR right = { fwd.x * std::cos(halfFOV) - fwd.z * std::sin(halfFOV), 0.0f, fwd.x * std::sin(halfFOV) + fwd.z * std::cos(halfFOV) };
 
     const Vertex origin = { GetJamesPosX(), GetJamesPosY() + height, GetJamesPosZ(), D3DCOLOR_ARGB(128, 0, 0, 255) };
     const Vertex leftPoint = { origin.x + left.x * range, origin.y, origin.z + left.z * range, D3DCOLOR_ARGB(128, 0, 0, 255) };
@@ -62,10 +62,13 @@ static std::vector<Triangle> transformRain(UINT primCount)
     std::vector<Triangle> triList;
     const float width = DropletSize;
 
+    const D3DXVECTOR3 upVec = { 0.0f, 1.0f, 0.0f };
+    const D3DVECTOR fwdVec = { flashlightDirVec_1FB7D28.x, 0.0f, flashlightDirVec_1FB7D28.z };
+    const D3DVECTOR james = { GetJamesPosX(), GetJamesPosY(), GetJamesPosZ() };
+
     for (size_t i = 0; i < primCount; i++)
     {
-        Line line = rainVerts_963880[i];
-        const Vertex james = { GetJamesPosX(), GetJamesPosY(), GetJamesPosZ() };
+        Line line = rainLines_963880[i];
 
         Vertex v0 = line.v0;
         Vertex v1 = line.v0;
@@ -74,13 +77,10 @@ static std::vector<Triangle> transformRain(UINT primCount)
         v0.diffuse = line.v1.diffuse;
         v2.diffuse = line.v1.diffuse;
 
-        // James forward direction vector
-        D3DVECTOR f = { forwardVec_1FB7D28.x, 0.0f, forwardVec_1FB7D28.z };
-
         // Direction vector to raindrop
         D3DVECTOR d = { v0.x - james.x, 0.0f, v0.z - james.z };
 
-        float dropAngle = (f.x * d.x + f.z * d.z) / std::sqrt(d.x * d.x + d.z * d.z);
+        float dropAngle = (fwdVec.x * d.x + fwdVec.z * d.z) / std::sqrt(d.x * d.x + d.z * d.z);
         bool isLit = dropAngle >= std::sqrt(2) / 2;
 
         if (isLit && GetFlashlightSwitch() && flashlightAvailable_942BF0 != 1)
@@ -111,10 +111,9 @@ static std::vector<Triangle> transformRain(UINT primCount)
         }
 
         // Build raindrop triangles
-        const Vertex center = { line.v0.x, (line.v0.y + line.v1.y) / 2, line.v0.z };
-        const D3DXVECTOR3 upVec = { 0.0f, 1.0f, 0.0f };
+        const D3DVECTOR center = { line.v0.x, (line.v0.y + line.v1.y) / 2, line.v0.z };
 
-        const Vertex camera = { GetInGameCameraPosX(), GetInGameCameraPosY(), GetInGameCameraPosZ() };
+        const D3DVECTOR camera = { GetInGameCameraPosX(), GetInGameCameraPosY(), GetInGameCameraPosZ() };
         D3DXVECTOR3 toCam = { camera.x - center.x, camera.y - center.y, camera.z - center.z };
         D3DXVec3Normalize(&toCam, &toCam);
 
@@ -141,7 +140,7 @@ static std::vector<Triangle> transformRain(UINT primCount)
 
     if (DEBUG_DrawFlashlightBeam)
     {
-        triList.push_back(DEBUG_flashlightBeam({ forwardVec_1FB7D28.x, 0.0f, forwardVec_1FB7D28.z }));
+        triList.push_back(DEBUG_flashlightBeam({ flashlightDirVec_1FB7D28.x, 0.0f, flashlightDirVec_1FB7D28.z }));
     }
 
     return triList;
@@ -181,7 +180,7 @@ static void drawRain(std::vector<Triangle>& triList)
         d3d8Device_A32894->SetVertexShader(D3DFVF_XYZ | D3DFVF_DIFFUSE);
 
         d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size(), triList.data(), 16);
-        //d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &rainVerts_963880, 16);
+        //d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &rainLines_963880, 16);
     }
 
     triListBackup.clear();
