@@ -405,6 +405,7 @@ copy /Y "$(ProjectDir)Resources\SH2EEsetup.exe" "$(TargetDir)" &gt;nul</Command>
     <ClInclude Include="Logging\Logging.h" />
     <ClInclude Include="Patches\ActorDrawingHook.h" />
     <ClInclude Include="Patches\Drips.h" />
+    <ClInclude Include="Patches\DripTypes.h" />
     <ClInclude Include="Patches\FlashlightReflection.h" />
     <ClInclude Include="Patches\FullscreenImages.h" />
     <ClInclude Include="Patches\InputTweaks.h" />

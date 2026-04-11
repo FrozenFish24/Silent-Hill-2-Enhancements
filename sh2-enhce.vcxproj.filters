@@ -780,7 +780,7 @@
     </ClInclude>
     <ClInclude Include="External\Hooking\Disasm.h">
       <Filter>External\Hooking</Filter>
-	  </ClInclude>
+    </ClInclude>
     <ClInclude Include="Patches\Drips.h">
       <Filter>Patches</Filter>
     </ClInclude>
@@ -825,6 +825,9 @@
     </ClInclude>
     <ClInclude Include="Common\ScopeGuard.h">
       <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Patches\DripTypes.h">
+      <Filter>Patches</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

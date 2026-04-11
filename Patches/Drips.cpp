@@ -1,4 +1,5 @@
 ﻿#include "Drips.h"
+#include "DripTypes.h"
 #include <vector>
 #include "Common\Utils.h"
 #include "Logging\Logging.h"
@@ -8,137 +9,36 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include "Wrappers\d3d8\DirectX81SDK\include\d3d8.h"
+#include "Wrappers\d3d8\DirectX81SDK\include\d3dx8.h"
 
-struct Vertex {
-    float x, y, z;
-    D3DCOLOR diffuse;
-};
+static std::vector<Triangle> triListBackup;
 
-struct Line {
-    Vertex v0, v1;
-};
-
-struct Triangle {
-    Vertex v0, v1, v2;
-};
-
-struct DrawCallType33
-{
-    IDirect3DBaseTexture8* texture;
-    DWORD vsHandle;
-    USHORT stride;
-    USHORT primitiveCount;
-    
-    //0 = D3DTOP_SELECTARG2, 1 = D3DTOP_SUBTRACT, 2 = D3DTOP_MODULATE, 3 = D3DTOP_MODULATE2X, 4 = D3DTOP_MODULATE4X
-    BYTE colorOpIndex;
-    BYTE alphaOpIndex;
-
-    USHORT pad;
-    void* vertices;
-    D3DMATRIX matrix; // Not used in types less than 33
-};
-
-enum class DrawCallType {
-    Nop = 0x7FFFFFFF,
-    Custom = 0x2C,
-    type2D = 0x2D,
-    type2E = 0x2E,
-    type22 = 22,
-    type33 = 33
-};
-
-// Draws nothing
-struct DrawCallTypeNop
-{
-};
-
-// Seems to just call func with the provided arg. For fully custom rendering logic?
-// If a specific local var in drawTransGeom is non-zero (probably a bitfield) it may also run setup and a bunch of other setup logic
-struct DrawCallTypeCustom
-{
-    void(__cdecl *func)(DWORD);
-    DWORD arg;
-    DWORD pad; // Unused
-    void(*setup)();
-};
-
-struct DrawCallType2D
-{
-    IDirect3DBaseTexture8* texture;
-    IDirect3DBaseTexture8* texture2; // May actually be a function pointer
-    IDirect3DVertexBuffer8* vertexBuffer;
-    DWORD startVertex;
-
-    // Affect VS constants somehow
-    DWORD vsConstantMod1;
-    DWORD vsConstantMod2;
-
-    USHORT stride;
-    BYTE primitiveCount; // +2 for some reason
-    BYTE unk_23; // Related to material selection
-};
-
-// Uses DrawPrimitiveUP with D3DPT_TRIANGLEFAN
-struct DrawCallType2E
-{
-    IDirect3DBaseTexture8* texture;
-    DWORD pad[2];
-    IDirect3DBaseTexture8* texture2;
-    USHORT primitiveCount;
-    USHORT unk_1A;
-    void* vertices;
-};
-
-// A tagged union of possible draw call variants
-struct DrawCallNode
-{
-    DrawCallNode* pNext;
-    DrawCallType type;
-    union {
-        DrawCallTypeNop typeNop;
-        DrawCallTypeCustom type2C;
-        DrawCallType2D type2D;
-        DrawCallType2E type2E;
-        DrawCallType33 type33;
-    };
-};
-
-struct DrawCalls
-{
-    void* unknown_00;
-    void* unknown_04;
-    void* unknown_08;
-    DrawCallNode* head;
-};
-
+// Original SH2 functions
 static auto originalDrawDrips = reinterpret_cast<void (*)(/* UINT primCount */)>(0x4EDE20);
 static auto originalDrawTransGeom = reinterpret_cast<void (*)(DrawCalls*)>(0x5AFEE0);
 
-BYTE& flashlightAvailable = *reinterpret_cast<BYTE*>(0x942BF0);
-IDirect3DDevice8*& g_d3d8Device_A32894 = *reinterpret_cast<IDirect3DDevice8**>(0xA32894);
-float& g_jamesRotation_1FB1030 = *reinterpret_cast<float*>(0x1FB1030);
-Line& vertexStreamZeroData_963880 = *reinterpret_cast<Line*>(0x963880);
-D3DVECTOR& forwardVec_1FB7D28 = *reinterpret_cast<D3DVECTOR*>(0x1FB7D28);
+// Original SH2 variables
+static BYTE& flashlightAvailable_942BF0 = *reinterpret_cast<BYTE*>(0x942BF0);
+static Line* vertexStreamZeroData_963880 = reinterpret_cast<Line*>(0x963880);
+static IDirect3DDevice8*& g_d3d8Device_A32894 = *reinterpret_cast<IDirect3DDevice8**>(0xA32894);
+static D3DVECTOR& forwardVec_1FB7D28 = *reinterpret_cast<D3DVECTOR*>(0x1FB7D28);
 
-static UINT primCountBackup = 0;
-static std::vector<Triangle> triListBackup;
-
-static inline D3DVECTOR normalize(const D3DVECTOR& vec)
+Triangle DEBUG_flashlightBeam(const D3DVECTOR& fwd)
 {
-    float magnitude = std::sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
-    return { vec.x / magnitude, vec.y / magnitude, vec.z / magnitude };
-}
+    constexpr float height = -680.0f;
+    constexpr float range = 3000.0f;
 
-static inline D3DVECTOR cross(const D3DVECTOR& a, const D3DVECTOR& b)
-{
-    return {
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x
-    };
-}
+    constexpr float halfFOV = 3.1415927f / 4.0f;
 
-Triangle DEBUG_flashlightBeam(const D3DVECTOR& fwd);
+    D3DVECTOR left = { fwd.x * std::cos(-halfFOV) - fwd.z * std::sin(-halfFOV), 0.0f, fwd.x * std::sin(-halfFOV) + fwd.z * std::cos(-halfFOV) };
+    D3DVECTOR right = { fwd.x * std::cos(halfFOV) - fwd.z * std::sin(halfFOV), 0.0f, fwd.x * std::sin(halfFOV) + fwd.z * std::cos(halfFOV) };
+
+    const Vertex origin = { GetJamesPosX(), GetJamesPosY() + height, GetJamesPosZ(), D3DCOLOR_ARGB(128, 0, 0, 255) };
+    const Vertex leftPoint = { origin.x + left.x * range, origin.y, origin.z + left.z * range, D3DCOLOR_ARGB(128, 0, 0, 255) };
+    const Vertex rightPoint = { origin.x + right.x * range, origin.y, origin.z + right.z * range, D3DCOLOR_ARGB(128, 0, 0, 255) };
+
+    return { origin, leftPoint, rightPoint };
+}
 
 // TODO: Move billboarding into vertex shader
 // TODO: Move lighting into vertex shader
@@ -153,15 +53,15 @@ static std::vector<Triangle> transformDrips(UINT primCount)
 
     for (size_t i = 0; i < primCount; i++)
     {
-        Line* line = &(&vertexStreamZeroData_963880)[i];
+        Line line = vertexStreamZeroData_963880[i];
         const Vertex james = { GetJamesPosX(), GetJamesPosY(), GetJamesPosZ() };
 
-        Vertex v0 = line->v0;
-        Vertex v1 = line->v0;
-        Vertex v2 = line->v0;
-        Vertex v3 = line->v1;
-        v0.diffuse = line->v1.diffuse;
-        v2.diffuse = line->v1.diffuse;
+        Vertex v0 = line.v0;
+        Vertex v1 = line.v0;
+        Vertex v2 = line.v0;
+        Vertex v3 = line.v1;
+        v0.diffuse = line.v1.diffuse;
+        v2.diffuse = line.v1.diffuse;
 
         // James forward direction vector
         D3DVECTOR f = { forwardVec_1FB7D28.x, 0.0f, forwardVec_1FB7D28.z };
@@ -172,7 +72,7 @@ static std::vector<Triangle> transformDrips(UINT primCount)
         float dropAngle = (f.x * d.x + f.z * d.z) / std::sqrt(d.x * d.x + d.z * d.z);
         bool isLit = dropAngle >= std::sqrt(2) / 2;
 
-        if (isLit && GetFlashlightSwitch() && flashlightAvailable != 1)
+        if (isLit && GetFlashlightSwitch() && flashlightAvailable_942BF0 != 1)
         {
             constexpr unsigned char litAlpha = 255;
             v0.diffuse = (v0.diffuse & 0x00FFFFFF) | (litAlpha << 24);
@@ -200,17 +100,18 @@ static std::vector<Triangle> transformDrips(UINT primCount)
         }
 
         // Build raindrop triangles
-        const Vertex center = { line->v0.x, (line->v0.y + line->v1.y) / 2, line->v0.z };
-        constexpr D3DVECTOR upVec = { 0.0f, 1.0f, 0.0f };
+        const Vertex center = { line.v0.x, (line.v0.y + line.v1.y) / 2, line.v0.z };
+        const D3DXVECTOR3 upVec = { 0.0f, 1.0f, 0.0f };
 
         const Vertex camera = { GetInGameCameraPosX(), GetInGameCameraPosY(), GetInGameCameraPosZ() };
-        D3DVECTOR toCam = { camera.x - center.x, camera.y - center.y, camera.z - center.z };
-        toCam = normalize(toCam);
+        D3DXVECTOR3 toCam = { camera.x - center.x, camera.y - center.y, camera.z - center.z };
+        D3DXVec3Normalize(&toCam, &toCam);
 
-        const D3DVECTOR rightVec = normalize(cross(upVec, toCam));
+        D3DXVECTOR3 rightVec;
+        D3DXVec3Normalize(&rightVec, D3DXVec3Cross(&rightVec, &upVec, &toCam));
 
         constexpr float DROP_SHOULDER_RATIO = 0.97f;
-        float dropShoulder = (line->v1.y - line->v0.y) * DROP_SHOULDER_RATIO;
+        float dropShoulder = (line.v1.y - line.v0.y) * DROP_SHOULDER_RATIO;
 
         v0.y += dropShoulder;
         v2.y += dropShoulder;
@@ -235,28 +136,11 @@ static std::vector<Triangle> transformDrips(UINT primCount)
     return triList;
 }
 
-Triangle DEBUG_flashlightBeam(const D3DVECTOR& fwd)
-{
-    constexpr float height = -680.0f;
-    constexpr float range = 3000.0f;
-
-    constexpr float halfFOV = 3.1415927f / 4.0f;
-
-    D3DVECTOR left = { fwd.x * std::cos(-halfFOV) - fwd.z * std::sin(-halfFOV), 0.0f, fwd.x * std::sin(-halfFOV) + fwd.z * std::cos(-halfFOV) };
-    D3DVECTOR right = { fwd.x * std::cos(halfFOV) - fwd.z * std::sin(halfFOV), 0.0f, fwd.x * std::sin(halfFOV) + fwd.z * std::cos(halfFOV) };
-
-    const Vertex origin = { GetJamesPosX(), GetJamesPosY() + height, GetJamesPosZ(), D3DCOLOR_ARGB(128, 0, 0, 255) };
-    const Vertex leftPoint = { origin.x + left.x * range, origin.y, origin.z + left.z * range, D3DCOLOR_ARGB(128, 0, 0, 255) };
-    const Vertex rightPoint = { origin.x + right.x * range, origin.y, origin.z + right.z * range, D3DCOLOR_ARGB(128, 0, 0, 255) };
-
-    return { origin, leftPoint, rightPoint };
-}
-
-void drawDrips(DWORD /*arg*/)
+static void drawDrips(std::vector<Triangle>& triList)
 {
     D3DMATRIX worldMatrix;
 
-    if (primCountBackup > 0)
+    if (triList.size() > 0)
     {
         DWORD lighting = 0;
         DWORD fogEnable = 0;
@@ -331,7 +215,7 @@ void drawDrips(DWORD /*arg*/)
         g_d3d8Device_A32894->SetTransform(D3DTS_WORLD, &worldMatrix);
         g_d3d8Device_A32894->SetVertexShader(D3DFVF_XYZ | D3DFVF_DIFFUSE);
 
-        g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triListBackup.size(), triListBackup.data(), 16);
+        g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size(), triList.data(), 16);
         //g_d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &vertexStreamZeroData_963880, 16);
 
         g_d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, lighting);
@@ -382,12 +266,12 @@ static void hookDrawDrips()
     //}
 }
 
-void __cdecl hookDrawTransGeom(DrawCalls* pDrawCalls)
+static void __cdecl hookDrawTransGeom(DrawCalls* pDrawCalls)
 {
     DrawCallNode rain = {};
     rain.type = DrawCallType::Custom;
-    rain.type2C.func = drawDrips;
-    rain.type2C.arg = 0;
+    rain.typeCustom.func = reinterpret_cast<void(*)(DWORD)>(drawDrips);
+    rain.typeCustom.arg = reinterpret_cast<DWORD>(&triListBackup);
 
     // Insert rain NODES_FROM_TAIL nodes from the end of the draw call list
     constexpr int NODES_FROM_TAIL = 9;
@@ -408,7 +292,7 @@ void __cdecl hookDrawTransGeom(DrawCalls* pDrawCalls)
 
     originalDrawTransGeom(pDrawCalls);
 
-    // Remove rain from the linked list in case the game tries to free it later
+    // Remove rain from the linked-list in case the game tries to free it later
     slow->pNext = rain.pNext;
 }
 
