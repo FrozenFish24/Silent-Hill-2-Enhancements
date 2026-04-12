@@ -9,6 +9,28 @@
 
 #include <vector>
 
+DWORD vsDeclRain[] = {
+    D3DVSD_STREAM(0),
+    D3DVSD_REG(D3DVSDE_POSITION, D3DVSDT_FLOAT3),
+    D3DVSD_REG(D3DVSDE_DIFFUSE, D3DVSDT_D3DCOLOR),
+    D3DVSD_END()
+};
+
+/*
+vs.1.1
+m4x4 oPos, v0, c32
+mov oD0, v5
+*/
+DWORD g_RainVSBytecode[] = {
+    0xfffe0101, 0x0009fffe, 0x58443344, 0x68532038,
+    0x72656461, 0x73734120, 0x6c626d65, 0x56207265,
+    0x69737265, 0x30206e6f, 0x0031392e, 0x00000014,
+    0xc00f0000, 0x90e40000, 0xa0e40020, 0x00000001,
+    0xd00f0000, 0x90e40005, 0x0000ffff
+};
+
+DWORD g_RainVSHandle = 0;
+
 struct Vertex {
     float x, y, z;
     D3DCOLOR diffuse;
@@ -177,7 +199,7 @@ static void drawRain(std::vector<Triangle>& triList)
         d3d8Device_A32894->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 
         d3d8Device_A32894->SetTransform(D3DTS_WORLD, &identity);
-        d3d8Device_A32894->SetVertexShader(D3DFVF_XYZ | D3DFVF_DIFFUSE);
+        d3d8Device_A32894->SetVertexShader(g_RainVSHandle);
 
         d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size(), triList.data(), 16);
         //d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &rainLines_963880, 16);
