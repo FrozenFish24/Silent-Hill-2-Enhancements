@@ -22,10 +22,10 @@ m4x4 oPos, v0, c32
 mov oD0, v5
 */
 DWORD g_RainVSBytecode[] = {
-    0xfffe0101, 0x0009fffe, 0x58443344, 0x68532038,
-    0x72656461, 0x73734120, 0x6c626d65, 0x56207265,
-    0x69737265, 0x30206e6f, 0x0031392e, 0x00000014,
-    0xc00f0000, 0x90e40000, 0xa0e40020, 0x00000001,
+    0xfffe0101, 0x0009fffe, 0x58443344, 0x68532038, 
+    0x72656461, 0x73734120, 0x6c626d65, 0x56207265, 
+    0x69737265, 0x30206e6f, 0x0031392e, 0x00000014, 
+    0xc00f0000, 0x90e40000, 0xa0e40020, 0x00000001, 
     0xd00f0000, 0x90e40005, 0x0000ffff
 };
 
@@ -84,9 +84,13 @@ static std::vector<Triangle> transformRain(UINT primCount)
     std::vector<Triangle> triList;
     const float width = DropletSize;
 
-    const D3DXVECTOR3 upVec = { 0.0f, 1.0f, 0.0f };
-    const D3DVECTOR fwdVec = { flashlightDirVec_1FB7D28.x, 0.0f, flashlightDirVec_1FB7D28.z };
+    const D3DVECTOR flashlightDir = { flashlightDirVec_1FB7D28.x, 0.0f, flashlightDirVec_1FB7D28.z };
     const D3DVECTOR james = { GetJamesPosX(), GetJamesPosY(), GetJamesPosZ() };
+
+    D3DMATRIX view;
+    d3d8Device_A32894->GetTransform(D3DTS_VIEW, &view);
+    D3DXVECTOR3 rightVec = { view._11, 0.0f, view._31 };
+    D3DXVec3Normalize(&rightVec, &rightVec);
 
     for (size_t i = 0; i < primCount; i++)
     {
@@ -102,7 +106,7 @@ static std::vector<Triangle> transformRain(UINT primCount)
         // Direction vector to raindrop
         D3DVECTOR d = { v0.x - james.x, 0.0f, v0.z - james.z };
 
-        float dropAngle = (fwdVec.x * d.x + fwdVec.z * d.z) / std::sqrt(d.x * d.x + d.z * d.z);
+        float dropAngle = (flashlightDir.x * d.x + flashlightDir.z * d.z) / std::sqrt(d.x * d.x + d.z * d.z);
         bool isLit = dropAngle >= std::sqrt(2) / 2;
 
         if (isLit && GetFlashlightSwitch() && flashlightAvailable_942BF0 != 1)
@@ -133,28 +137,19 @@ static std::vector<Triangle> transformRain(UINT primCount)
         }
 
         // Build raindrop triangles
-        const D3DVECTOR center = { line.v0.x, (line.v0.y + line.v1.y) / 2, line.v0.z };
-
-        const D3DVECTOR camera = { GetInGameCameraPosX(), GetInGameCameraPosY(), GetInGameCameraPosZ() };
-        D3DXVECTOR3 toCam = { camera.x - center.x, camera.y - center.y, camera.z - center.z };
-        D3DXVec3Normalize(&toCam, &toCam);
-
-        D3DXVECTOR3 rightVec;
-        D3DXVec3Normalize(&rightVec, D3DXVec3Cross(&rightVec, &upVec, &toCam));
-
         constexpr float DROP_SHOULDER_RATIO = 0.97f;
         float dropShoulder = (line.v1.y - line.v0.y) * DROP_SHOULDER_RATIO;
 
         v0.y += dropShoulder;
         v2.y += dropShoulder;
 
-        v0.x -= rightVec.x * (width * 0.5f);
-        v0.y -= rightVec.y * (width * 0.5f);
-        v0.z -= rightVec.z * (width * 0.5f);
+        v0.x += rightVec.x * (width * 0.5f);
+        v0.y += rightVec.y * (width * 0.5f);
+        v0.z += rightVec.z * (width * 0.5f);
         
-        v2.x += rightVec.x * (width * 0.5f);
-        v2.y += rightVec.y * (width * 0.5f);
-        v2.z += rightVec.z * (width * 0.5f);
+        v2.x -= rightVec.x * (width * 0.5f);
+        v2.y -= rightVec.y * (width * 0.5f);
+        v2.z -= rightVec.z * (width * 0.5f);
 
         triList.push_back({ v0, v1, v2 });
         triList.push_back({ v0, v2, v3 });
@@ -162,7 +157,7 @@ static std::vector<Triangle> transformRain(UINT primCount)
 
     if (DEBUG_DrawFlashlightBeam)
     {
-        triList.push_back(DEBUG_flashlightBeam({ flashlightDirVec_1FB7D28.x, 0.0f, flashlightDirVec_1FB7D28.z }));
+        triList.push_back(DEBUG_flashlightBeam({ flashlightDir.x, 0.0f, flashlightDir.z }));
     }
 
     return triList;
@@ -201,7 +196,7 @@ static void drawRain(std::vector<Triangle>& triList)
         d3d8Device_A32894->SetTransform(D3DTS_WORLD, &identity);
         d3d8Device_A32894->SetVertexShader(g_RainVSHandle);
 
-        d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size(), triList.data(), 16);
+        d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size(), triList.data(), sizeof(Vertex));
         //d3d8Device_A32894->DrawPrimitiveUP(D3DPT_LINELIST, primCount, &rainLines_963880, 16);
     }
 
