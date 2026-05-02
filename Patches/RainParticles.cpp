@@ -5,7 +5,7 @@
 #include "Wrappers\d3d8\DirectX81SDK\include\d3dx8.h"
 #include <vector>
 
-DWORD vsDeclRain[] = {
+DWORD g_VsDeclRain[] = {
     D3DVSD_STREAM(0),
     D3DVSD_REG(D3DVSDE_POSITION, D3DVSDT_FLOAT3),
     D3DVSD_REG(D3DVSDE_DIFFUSE, D3DVSDT_D3DCOLOR),
@@ -102,19 +102,19 @@ static std::vector<TriVertex> transformRain(UINT primCount)
 
         const D3DVECTOR center = { v0.x, (v0.y + v1.y) / 2, v0.z };
         const TriVertex verts[] = {
-            { center.x, center.y, center.z, v0.diffuse,  0.0f,  -1.0f   },
-            { center.x, center.y, center.z, v1.diffuse,  1.0f,   0.975f },
-            { center.x, center.y, center.z, v1.diffuse, -1.0f,   0.975f },
-            { center.x, center.y, center.z, v1.diffuse,  0.83f,  0.989f },
-            { center.x, center.y, center.z, v1.diffuse, -0.83f,  0.989f },
-            { center.x, center.y, center.z, v1.diffuse,  0.0f,   1.0f   }
+            { center.x, center.y, center.z, v0.diffuse,  0.0f,   1.0f   },
+            { center.x, center.y, center.z, v1.diffuse,  1.0f,  -0.975f },
+            { center.x, center.y, center.z, v1.diffuse, -1.0f,  -0.975f },
+            { center.x, center.y, center.z, v1.diffuse,  0.83f, -0.989f },
+            { center.x, center.y, center.z, v1.diffuse, -0.83f, -0.989f },
+            { center.x, center.y, center.z, v1.diffuse,  0.0f,  -1.0f   }
         };
 
         triList.insert(triList.end(), {
-            verts[0], verts[1], verts[2],
-            verts[2], verts[1], verts[3],
-            verts[3], verts[4], verts[2],
-            verts[3], verts[5], verts[4]
+            verts[0], verts[2], verts[1],
+            verts[2], verts[3], verts[1],
+            verts[2], verts[4], verts[3],
+            verts[4], verts[5], verts[3]
         });
     }
 
@@ -134,11 +134,11 @@ static void drawRain(std::vector<TriVertex>& triList)
     {
         IDirect3DDevice8* device = static_cast<IDirect3DDevice8*>(GetD3dDevice());
 
-        constexpr float upVec[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
+        constexpr float upVec[4] = { 0.0f, -1.0f, 0.0f, 0.0f };
 
         D3DMATRIX view;
         device->GetTransform(D3DTS_VIEW, &view);
-        D3DXVECTOR4 rightVec = { -view._11, 0.0f, -view._31, 0.0f }; // Should I be negating this?
+        D3DXVECTOR4 rightVec = { view._11, 0.0f, view._31, 0.0f };
         D3DXVec4Normalize(&rightVec, &rightVec);
 
         const D3DVECTOR jamesPos = { GetJamesPosX(), 0.0f, GetJamesPosZ() };
