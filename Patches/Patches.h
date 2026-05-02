@@ -662,7 +662,7 @@ void PatchDogRoom();
 void PatchDoubleFootstepFix();
 void PatchDrawDistance();
 void PatchEddieLauraCutscene();
-void PatchRainQuads();
+void PatchRainParticles();
 void PatchElevatorCursorColor();
 void PatchFinalBossRoom();
 void PatchFireEscapeKey();

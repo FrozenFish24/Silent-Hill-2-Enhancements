@@ -1,13 +1,9 @@
-﻿#include "RainQuads.h"
-#include "TransparentDrawTypes.h"
+﻿#include "TransparentDrawTypes.h"
 #include "Common\Utils.h"
 #include "Logging\Logging.h"
 #include "Patches\Patches.h"
 #include "Wrappers\d3d8\DirectX81SDK\include\d3dx8.h"
 #include <vector>
-
-// TODO:
-// ini option
 
 DWORD vsDeclRain[] = {
     D3DVSD_STREAM(0),
@@ -234,7 +230,7 @@ static void hookDrawTransparent(DrawCalls* pDrawCalls)
     slow->pNext = rain.pNext;
 }
 
-void PatchRainQuads()
+void PatchRainParticles()
 {
     switch (GameVersion)
     {

@@ -650,6 +650,10 @@ void DelayedStart()
 		PatchWaterDrawOrderFix();
 	}
 
+	if (RainParticles) {
+		PatchRainParticles();
+	}
+
     if (CockroachesReplacement)
     {
         PatchCockroachesReplacement();
@@ -859,8 +863,6 @@ void DelayedStart()
 	{
 		PatchEddieLauraCutscene();
 	}
-
-	PatchRainQuads();
 	
 	// Remove the "Now loading..." and "Press Return to continue." messages
 	if (DisableLoadingPressReturnMessages)
