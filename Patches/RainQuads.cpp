@@ -6,6 +6,9 @@
 #include "Wrappers\d3d8\DirectX81SDK\include\d3dx8.h"
 #include <vector>
 
+// TODO:
+// ini option
+
 DWORD vsDeclRain[] = {
     D3DVSD_STREAM(0),
     D3DVSD_REG(D3DVSDE_POSITION, D3DVSDT_FLOAT3),
@@ -83,16 +86,11 @@ struct TriVertex {
     float offX, offY;
 };
 
+// Original SH2 addresses
+static void (*originalDrawTransparent)(DrawCalls*) = nullptr;
+static LineVertex* rainLines = nullptr;
+
 static std::vector<TriVertex> triListBackup;
-
-// Original SH2 functions
-static auto originalDrawTransparent = reinterpret_cast<void (*)(DrawCalls*)>(0x5AFEE0);
-
-// Original SH2 variables
-static BYTE& flashlightAvailable_942BF0 = *reinterpret_cast<BYTE*>(0x942BF0);
-static LineVertex* rainLines_963880 = reinterpret_cast<LineVertex*>(0x963880);
-static IDirect3DDevice8*& d3d8Device_A32894 = *reinterpret_cast<IDirect3DDevice8**>(0xA32894);
-static D3DVECTOR& flashlightDirVec_1FB7D28 = *reinterpret_cast<D3DVECTOR*>(0x1FB7D28);
 
 static std::vector<TriVertex> transformRain(UINT primCount)
 {
@@ -101,10 +99,10 @@ static std::vector<TriVertex> transformRain(UINT primCount)
 
     std::vector<TriVertex> triList;
 
-    for (size_t i = 0; i < primCount; i+=2)
+    for (size_t i = 0; i < primCount; i += 2)
     {
-        LineVertex v0 = rainLines_963880[i];
-        LineVertex v1 = rainLines_963880[i+1];
+        LineVertex v0 = rainLines[i];
+        LineVertex v1 = rainLines[i+1];
 
         const D3DVECTOR center = { v0.x, (v0.y + v1.y) / 2, v0.z };
         const TriVertex verts[] = {
@@ -138,55 +136,57 @@ static void drawRain(std::vector<TriVertex>& triList)
 
     if (triList.size() > 0)
     {
+        IDirect3DDevice8* device = static_cast<IDirect3DDevice8*>(GetD3dDevice());
+
         constexpr float upVec[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
 
         D3DMATRIX view;
-        d3d8Device_A32894->GetTransform(D3DTS_VIEW, &view);
+        device->GetTransform(D3DTS_VIEW, &view);
         D3DXVECTOR4 rightVec = { -view._11, 0.0f, -view._31, 0.0f }; // Should I be negating this?
         D3DXVec4Normalize(&rightVec, &rightVec);
 
         const D3DVECTOR jamesPos = { GetJamesPosX(), 0.0f, GetJamesPosZ() };
 
-        D3DXVECTOR3 flashlightDir = { flashlightDirVec_1FB7D28.x, 0.0f, flashlightDirVec_1FB7D28.z };
+        D3DXVECTOR3 flashlightDir = { GetFlashlightDirX(), 0.0f, GetFlashlightDirZ() };
         D3DXVec3Normalize(&flashlightDir, &flashlightDir);
 
         const float params[4] = {
             1.0f,        // raindrop half width
             50.0f,       // raindrop half height, all raindrops are 100 world units tall (I think)
             0.70710677f, // cos(45°), angle for illuminating raindrops
-            static_cast<float>(GetFlashlightSwitch() && flashlightAvailable_942BF0 != 1) // flashlight active
+            static_cast<float>(GetFlashlightSwitch() && GetFlashlightAvailable()) // flashlight active
         };
 
-        d3d8Device_A32894->SetRenderState(D3DRS_LIGHTING, FALSE);
-        d3d8Device_A32894->SetRenderState(D3DRS_FOGENABLE, FALSE);
-        d3d8Device_A32894->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-        d3d8Device_A32894->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-        d3d8Device_A32894->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-        d3d8Device_A32894->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-        d3d8Device_A32894->SetRenderState(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
-        d3d8Device_A32894->SetRenderState(D3DRS_COLORVERTEX, TRUE);
-        d3d8Device_A32894->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, D3DMCS_COLOR1);
-        d3d8Device_A32894->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, D3DMCS_MATERIAL);
+        device->SetRenderState(D3DRS_LIGHTING, FALSE);
+        device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+        device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+        device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+        device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+        device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        device->SetRenderState(D3DRS_FOGVERTEXMODE, D3DFOG_NONE);
+        device->SetRenderState(D3DRS_COLORVERTEX, TRUE);
+        device->SetRenderState(D3DRS_DIFFUSEMATERIALSOURCE, D3DMCS_COLOR1);
+        device->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, D3DMCS_MATERIAL);
         
-        d3d8Device_A32894->SetTexture(0, NULL);
-        d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-        d3d8Device_A32894->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-        d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-        d3d8Device_A32894->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
-        d3d8Device_A32894->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-        d3d8Device_A32894->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+        device->SetTexture(0, NULL);
+        device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+        device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+        device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+        device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+        device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        device->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
 
-        d3d8Device_A32894->SetTransform(D3DTS_WORLD, &identity);
+        device->SetTransform(D3DTS_WORLD, &identity);
 
-        d3d8Device_A32894->SetVertexShaderConstant(90, &rightVec, 1);
-        d3d8Device_A32894->SetVertexShaderConstant(91, &upVec, 1);
-        d3d8Device_A32894->SetVertexShaderConstant(92, &jamesPos, 1);
-        d3d8Device_A32894->SetVertexShaderConstant(93, &flashlightDir, 1);
-        d3d8Device_A32894->SetVertexShaderConstant(94, &params, 1);
+        device->SetVertexShaderConstant(90, &rightVec, 1);
+        device->SetVertexShaderConstant(91, &upVec, 1);
+        device->SetVertexShaderConstant(92, &jamesPos, 1);
+        device->SetVertexShaderConstant(93, &flashlightDir, 1);
+        device->SetVertexShaderConstant(94, &params, 1);
 
-        d3d8Device_A32894->SetVertexShader(g_RainVSHandle);
+        device->SetVertexShader(g_RainVSHandle);
 
-        d3d8Device_A32894->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size() / 3, triList.data(), sizeof(TriVertex));
+        device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triList.size() / 3, triList.data(), sizeof(TriVertex));
     }
 
     triListBackup.clear();
@@ -239,16 +239,28 @@ void PatchRainQuads()
     switch (GameVersion)
     {
     case SH2V_10:
+        originalDrawTransparent = reinterpret_cast<void (*)(DrawCalls*)>(0x5AFEE0);
+        rainLines = reinterpret_cast<LineVertex*>(0x963880);
+
         WriteCalltoMemory(reinterpret_cast<BYTE*>(0x4EE4C6), hookDrawRain);
         WriteCalltoMemory(reinterpret_cast<BYTE*>(0x4EE8E0), hookDrawRain);
-
         WriteCalltoMemory(reinterpret_cast<BYTE*>(0x4762A5), hookDrawTransparent);
         break;
     case SH2V_11:
-        Logging::Log() << __FUNCTION__ << " Error: not implemented for v1.1!";
+        originalDrawTransparent = reinterpret_cast<void (*)(DrawCalls*)>(0x5B0810);
+        rainLines = reinterpret_cast<LineVertex*>(0x967480);
+
+        WriteCalltoMemory(reinterpret_cast<BYTE*>(0x4EE776), hookDrawRain);
+        WriteCalltoMemory(reinterpret_cast<BYTE*>(0x4EEB90), hookDrawRain);
+        WriteCalltoMemory(reinterpret_cast<BYTE*>(0x476545), hookDrawTransparent);
         break;
     case SH2V_DC:
-        Logging::Log() << __FUNCTION__ << " Error: not implemented for DC!";
+        originalDrawTransparent = reinterpret_cast<void (*)(DrawCalls*)>(0x5B0130);
+        rainLines = reinterpret_cast<LineVertex*>(0x966480);
+
+        WriteCalltoMemory(reinterpret_cast<BYTE*>(0x4EE036), hookDrawRain);
+        WriteCalltoMemory(reinterpret_cast<BYTE*>(0x4EE450), hookDrawRain);
+        WriteCalltoMemory(reinterpret_cast<BYTE*>(0x476755), hookDrawTransparent);
         break;
     case SH2V_UNKNOWN:
         Logging::Log() << __FUNCTION__ << " Error: unknown game version!";
